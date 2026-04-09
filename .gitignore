@@ -27,3 +27,10 @@ system_intended_capabilities.md
 server.py.backup
 static/
 main_pre_memory.py
+brain*.py
+fix.py
+agent.py
+patch_youtube.py
+ask_jarvis_logic.py
+jarvis_brain.py
+jarvis_unified.py
