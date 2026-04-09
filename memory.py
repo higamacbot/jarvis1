@@ -1,75 +1,81 @@
 import sqlite3
-import json
-from datetime import datetime
+import os
 
-DB_PATH = "memory.db"
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_memory.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS conversations 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, role TEXT, content TEXT)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS preferences 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT, value TEXT, timestamp TEXT)''')
+    # Table for general conversation history
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conversation (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role TEXT,
+            content TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    # Table for specific user preferences/facts
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS preferences (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
 def save_conversation(role, content):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO conversations (timestamp, role, content) VALUES (?, ?, ?)",
-                   (datetime.now().isoformat(), role, content))
-    conn.commit()
-    conn.close()
-
-def detect_and_save_preference(text):
-    # Expanded trigger list for better "listening"
-    triggers = ["i prefer", "i want", "i like", "i hate", "avoid", "always", "never", "my strategy", "remember that"]
-    if any(trigger in text.lower() for trigger in triggers):
+    try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        key = f"user_pref_{int(datetime.now().timestamp())}"
-        cursor.execute("INSERT INTO preferences (key, value, timestamp) VALUES (?, ?, ?)",
-                       (key, text, datetime.now().isoformat()))
+        cursor.execute("INSERT INTO conversation (role, content) VALUES (?, ?)", (role, content))
         conn.commit()
         conn.close()
-        return True
-    return False
+    except Exception as e:
+        print(f">> MEMORY ERROR: {e}")
 
-def get_memory_context(limit=5):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Get recent chat history
-    cursor.execute("SELECT role, content FROM conversations ORDER BY id DESC LIMIT ?", (limit,))
-    history = cursor.fetchall()[::-1]
-    
-    # Get ALL saved preferences
-    cursor.execute("SELECT value FROM preferences ORDER BY id DESC")
-    prefs = cursor.fetchall()
-    
-    conn.close()
-    
-    context = "--- LONG-TERM USER PREFERENCES ---\n"
-    if prefs:
-        for p in prefs:
-            context += f"- {p[0]}\n"
-    else:
-        context += "No specific preferences recorded yet.\n"
+def get_memory_context(limit=10):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT role, content FROM conversation ORDER BY id DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()[::-1]
+        conn.close()
         
-    context += "\n--- RECENT CONVERSATION ---\n"
-    for role, content in history:
-        context += f"{role.upper()}: {content}\n"
-        
-    return context
+        context = "--- PAST CONVERSATION MEMORY ---\n"
+        for role, content in rows:
+            context += f"{role.upper()}: {content}\n"
+        return context
+    except Exception:
+        return ""
 
-if __name__ == "__main__":
-    init_db()
-    print(">> MEMORY: Diagnostic check...")
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM preferences")
-    print("PREFERENCES:", cursor.fetchall())
-    cursor.execute("SELECT * FROM conversations LIMIT 5")
-    print("CONVERSATIONS:", cursor.fetchall())
-    conn.close()
+def save_preference(key, value):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)", (key, value))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f">> PREFERENCE ERROR: {e}")
+
+def get_all_preferences():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT key, value FROM preferences")
+        rows = cursor.fetchall()
+        conn.close()
+        return {row[0]: row[1] for row in rows}
+    except Exception:
+        return {}
+
+def extract_summary(text):
+    """
+    Simple helper to prevent saving massive YouTube transcripts 
+    directly into the short-term memory DB.
+    """
+    if len(text) > 500:
+        return text[:500] + "..."
+    return text
