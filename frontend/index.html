@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>J.A.R.V.I.S | Unified Core</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0; height: 100vh; width: 100%;
+      background-color: #000014; color: #00FFFF;
+      font-family: 'Share Tech Mono', monospace;
+      display: grid; grid-template-columns: 320px 1fr 380px;
+      grid-template-rows: 60px 1fr; overflow: hidden;
+    }
+    header {
+      grid-column: 1 / -1; background-color: #001122;
+      border-bottom: 1px solid #00FFFF; display: flex;
+      justify-content: space-between; align-items: center;
+      padding: 0 15px; font-weight: bold; font-size: 0.85rem;
+    }
+    #sidebar-left, #chat-right {
+      background: #001122; padding: 15px; border-left: 1px solid #004444;
+      border-right: 1px solid #004444; display: flex; flex-direction: column;
+      gap: 15px; overflow-y: auto;
+    }
+    .panel {
+      border: 1px solid #00FFFF; padding: 10px; background-color: #000a22;
+      box-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+    }
+    h3 { margin: 0 0 10px 0; font-size: 0.85rem; text-transform: uppercase; border-bottom: 1px solid #00FFFF; padding-bottom: 5px; }
+    #main-core {
+      display: flex; flex-direction: column; justify-content: center;
+      align-items: center; background-color: #000011;
+      box-shadow: 0 0 30px rgba(0, 255, 255, 0.1) inset;
+    }
+    .ring {
+      position: absolute; border-radius: 50%; border: 1px solid #00FFFF;
+      opacity: 0.3; animation: pulse 4s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 0.1; }
+      50% { transform: scale(1.1); opacity: 0.5; box-shadow: 0 0 20px #00FFFF; }
+    }
+    #chat-history {
+      flex: 1; background-color: #000818; padding: 10px; border: 1px solid #004444;
+      margin-bottom: 10px; overflow-y: auto; white-space: pre-wrap; font-size: 0.85rem; color: #00FFFF;
+    }
+    #chat-input {
+      background-color: #000011; border: 1px solid #00FFFF; color: #00FFFF;
+      padding: 12px; font-family: 'Share Tech Mono', monospace; width: 100%; outline: none;
+    }
+    .up { color: #4ade80; } .down { color: #f87171; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>J.A.R.V.I.S. // M4 CORE // SOVEREIGN-INTEL</div>
+    <div id="clock">00:00:00</div>
+    <div id="uptime-display">UPTIME: 00:00:00</div>
+  </header>
+  <aside id="sidebar-left">
+    <div class="panel">
+      <h3>📊 MARKET PULSE (BINANCE)</h3>
+      <div id="stock-list">SYNCING...</div>
+    </div>
+    <div class="panel">
+      <h3>⚙️ CORE METRICS</h3>
+      <div id="metrics" style="font-size: 0.75rem;">
+        <div>LOAD: <span id="cpu-load">26%</span></div>
+        <div>COMMANDS: <span id="cmd-count">0</span></div>
+      </div>
+    </div>
+  </aside>
+  <main id="main-core">
+    <div style="position:relative; width:240px; height:240px; display:flex; justify-content:center; align-items:center;">
+      <div class="ring" style="width:100%; height:100%;"></div>
+      <div class="ring" style="width:75%; height:75%; animation-delay:1s;"></div>
+      <div style="width:12px; height:12px; background:#00FFFF; border-radius:50%; box-shadow:0 0 15px #00FFFF;"></div>
+    </div>
+    <p id="voice-status" style="margin-top:30px; letter-spacing:5px;">LISTENING</p>
+  </main>
+  <aside id="chat-right">
+    <h3>INTELLIGENCE FEED</h3>
+    <div id="chat-history">>> INITIALIZING NEURAL LINK...</div>
+    <input id="chat-input" placeholder="INPUT COMMAND..." autocomplete="off">
+  </aside>
+
+  <script>
+    const ws = new WebSocket(`ws://${window.location.host}/ws`);
+    const history = document.getElementById('chat-history');
+    const input = document.getElementById('chat-input');
+
+    // Handle incoming data from Python
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      if (data.type === 'telemetry') {
+        // Update Stocks
+        document.getElementById('stock-list').innerHTML = data.stocks.map(s => `
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:0.8rem;">
+            <span>${s.symbol}</span>
+            <span class="${s.change === 'LIVE' ? 'up' : ''}">${s.price}</span>
+          </div>
+        `).join('');
+        
+        // Update Stats
+        document.getElementById('uptime-display').innerText = `UPTIME: ${data.stats.uptime}`;
+        document.getElementById('cpu-load').innerText = data.stats.load + '%';
+        document.getElementById('cmd-count').innerText = data.stats.commands;
+      } 
+      
+      if (data.type === 'answer') {
+        history.innerText += `\n\n>> JARVIS: ${data.text}`;
+        history.scrollTop = history.scrollHeight;
+        document.getElementById('voice-status').innerText = 'LISTENING';
+      }
+    };
+
+    // Handle outgoing commands
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && input.value.trim()) {
+        const msg = input.value;
+        history.innerText += `\n\n>> USER: ${msg}`;
+        ws.send(JSON.stringify({ message: msg }));
+        input.value = '';
+        document.getElementById('voice-status').innerText = 'PROCESSING';
+        history.scrollTop = history.scrollHeight;
+      }
+    });
+
+    setInterval(() => {
+      document.getElementById('clock').innerText = new Date().toLocaleTimeString();
+    }, 1000);
+  </script>
+</body>
+</html>

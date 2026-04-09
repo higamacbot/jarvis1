@@ -1,0 +1,14 @@
+keys.py
+memory.db
+jarvis_brain.db
+.env
+venv/
+__pycache__/
+*.pyc
+*.log
+*.bak
+nohup.out
+temp_audio.webm
+jarvis_memory_db/
+models/
+transcripts/
