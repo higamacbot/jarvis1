@@ -70,13 +70,13 @@ def parse_trade_intent(message: str) -> Optional[dict]:
 
     # If no name match, look for uppercase ticker in original message
     if not found_symbol:
-        ticker_match = re.search(r'\b([A-Z]{2,5})\b', message)
-        if ticker_match:
-            candidate = ticker_match.group(1)
-            # Make sure it's not a trigger word
-            skip_words = {"BUY", "SELL", "GET", "ALL", "MY", "ME"}
-            if candidate not in skip_words:
-                found_symbol = candidate
+        skip_words = {"BUY", "SELL", "GET", "ALL", "MY", "ME", "FOR",
+                     "HALF", "THE", "AND", "ONE", "TWO", "BUY", "OF"}
+        for word in message.split():
+            clean = re.sub(r'[^a-zA-Z]', '', word).upper()
+            if 2 <= len(clean) <= 5 and clean not in skip_words:
+                found_symbol = clean
+                break
 
     if not found_symbol:
         return None
