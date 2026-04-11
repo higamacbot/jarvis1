@@ -107,8 +107,8 @@
         
         // Update Stats
         document.getElementById('uptime-display').innerText = `UPTIME: ${data.stats.uptime}`;
-        document.getElementById('cpu-load').innerText = data.stats.load + '%';
-        document.getElementById('cmd-count').innerText = data.stats.commands;
+        document.getElementById('cpu-load').innerText = (data.stats.load ?? data.stats.cpu_total ?? '?') + '%';
+        document.getElementById('cmd-count').innerText = data.stats.commands ?? '0';
       } 
       
       if (data.type === 'answer') {

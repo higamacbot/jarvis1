@@ -102,6 +102,21 @@ async def handle_trade(msg):
     except Exception as e:
         return f"Trade error: {e}"
 
+async def handle_indicators(msg, portfolio_positions=None):
+    try:
+        from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, analyze_ticker, analyze_portfolio
+        if not is_indicator_request(msg):
+            return None
+        if is_portfolio_scan(msg) and portfolio_positions:
+            symbols = [p["symbol"] for p in portfolio_positions]
+            return await asyncio.to_thread(analyze_portfolio, symbols)
+        ticker = extract_ticker(msg)
+        if ticker:
+            return await asyncio.to_thread(analyze_ticker, ticker)
+        return None
+    except Exception as e:
+        return f"Indicator error: {e}"
+
 async def handle_youtube(msg):
     try:
         from youtube_tools import handle_youtube_request
@@ -222,6 +237,14 @@ async def handle_message(update, context):
     if not is_authorized(update): return
     user_msg = update.message.text.strip()
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    portfolio = await get_portfolio()
+
+    # ── Indicator path ────────────────────────────────────────────────────
+    indicator = await handle_indicators(user_msg, portfolio.get("positions", []))
+    if indicator:
+        await send_msg(context.bot, update.effective_chat.id, indicator)
+        return
+
     trade = await handle_trade(user_msg)
     if trade:
         await update.message.reply_text(trade)

@@ -20,6 +20,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import memory
 from youtube_tools import handle_youtube_request
 from trading import is_trade_command, parse_trade_intent, execute_trade_intent, get_trade_history
+from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, analyze_ticker, analyze_portfolio
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURATION
@@ -291,6 +292,35 @@ async def websocket_endpoint(websocket: WebSocket):
                     await asyncio.to_thread(speak, reply)
                     await websocket.send_json({"type": "answer", "text": reply})
                     continue
+
+            # INDICATOR PATH
+            if is_indicator_request(user_msg):
+                if is_portfolio_scan(user_msg):
+                    symbols = [p["symbol"] for p in latest_portfolio.get("positions", [])]
+                    reply = await asyncio.to_thread(analyze_portfolio, symbols) if symbols else "No positions found, sir."
+                else:
+                    ticker = extract_ticker(user_msg)
+                    if ticker:
+                        await websocket.send_json({"type": "answer", "text": f"Analyzing {ticker}..."})
+                        reply = await asyncio.to_thread(analyze_ticker, ticker)
+                    else:
+                        reply = await ask_ollama(user_msg)
+                await asyncio.to_thread(speak, reply)
+                await websocket.send_json({"type": "answer", "text": reply})
+                continue
+
+            # YOUTUBE PATH
+            yt_result, yt_mode = await asyncio.to_thread(handle_youtube_request, user_msg)
+            if yt_result and yt_mode == "youtube_summarize":
+                await websocket.send_json({"type": "answer", "text": "Fetching and analyzing video..."})
+                reply = await ask_ollama(user_msg, extra_context=yt_result)
+                await asyncio.to_thread(speak, reply)
+                await websocket.send_json({"type": "answer", "text": reply})
+                continue
+            elif yt_result:
+                await asyncio.to_thread(speak, yt_result[:500])
+                await websocket.send_json({"type": "answer", "text": yt_result})
+                continue
 
             # DEFAULT PATH
             await asyncio.to_thread(detect_and_save_preference, user_msg)
