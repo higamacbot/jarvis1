@@ -155,21 +155,22 @@ def get_system_metrics() -> dict:
 # DATA FEEDS
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def fetch_binance():
+async def fetch_crypto():
     global latest_market_data
-    url = 'https://api.binance.com/api/v3/ticker/price?symbols=["BTCUSDT","ETHUSDT","SOLUSDT"]'
+    url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd"
     while True:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 r = await client.get(url)
                 if r.status_code == 200:
-                    for item in r.json():
-                        symbol = item["symbol"].replace("USDT", "")
-                        latest_market_data[symbol] = {
-                            "price":  f"{float(item['price']):,.2f}",
-                            "source": "BINANCE",
-                        }
-            await asyncio.sleep(2)
+                    data = r.json()
+                    latest_market_data["BTC"] = {"price": f"{data['bitcoin']['usd']:,.2f}", "source": "COINGECKO"}
+                    latest_market_data["ETH"] = {"price": f"{data['ethereum']['usd']:,.2f}", "source": "COINGECKO"}
+                    latest_market_data["SOL"] = {"price": f"{data['solana']['usd']:,.2f}", "source": "COINGECKO"}
+            await asyncio.sleep(30)
+        except Exception as e:
+            print(f">> CRYPTO ERROR: {e}")
+            await asyncio.sleep(60)
         except Exception:
             await asyncio.sleep(10)
 
@@ -244,7 +245,7 @@ JARVIS:"""
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(memory.init_db)
-    tasks = [asyncio.create_task(fetch_binance()), asyncio.create_task(fetch_alpaca())]
+    tasks = [asyncio.create_task(fetch_crypto()), asyncio.create_task(fetch_alpaca())]
     yield
     for t in tasks: t.cancel()
 
