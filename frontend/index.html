@@ -67,10 +67,20 @@
     </div>
     <div class="panel">
       <h3>⚙️ CORE METRICS</h3>
-      <div id="metrics" style="font-size: 0.75rem;">
-        <div>LOAD: <span id="cpu-load">26%</span></div>
-        <div>COMMANDS: <span id="cmd-count">0</span></div>
+      <div id="metrics" style="font-size: 0.75rem; display:flex; flex-direction:column; gap:4px;">
+        <div style="display:flex; justify-content:space-between;"><span>CPU</span><span id="cpu-load" class="up">--%</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>RAM</span><span id="ram-load" class="up">--</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>DISK</span><span id="disk-load">--%</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>NET ↑</span><span id="net-sent">--MB</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>NET ↓</span><span id="net-recv">--MB</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>CMDS</span><span id="cmd-count">0</span></div>
       </div>
+    </div>
+    <div class="panel">
+      <h3>💰 PORTFOLIO</h3>
+      <div id="portfolio-equity" style="font-size:1.1rem; color:#00FFFF;">$0.00</div>
+      <div id="portfolio-pl" style="font-size:0.75rem; margin-top:4px;">Day P/L: --</div>
+      <div id="portfolio-positions" style="font-size:0.75rem; margin-top:6px;"></div>
     </div>
   </aside>
   <main id="main-core">
@@ -107,8 +117,39 @@
         
         // Update Stats
         document.getElementById('uptime-display').innerText = `UPTIME: ${data.stats.uptime}`;
-        document.getElementById('cpu-load').innerText = (data.stats.load ?? data.stats.cpu_total ?? '?') + '%';
+        const cpu = data.stats.load ?? data.stats.cpu_total ?? '?';
+        const cpuEl = document.getElementById('cpu-load');
+        cpuEl.innerText = cpu + '%';
+        cpuEl.className = cpu > 80 ? 'down' : 'up';
+
+        const ram = data.stats.ram_used_gb ?? '--';
+        const ramTotal = data.stats.ram_total_gb ?? '--';
+        document.getElementById('ram-load').innerText = `${ram}/${ramTotal}GB`;
+
+        const disk = data.stats.disk_percent ?? '--';
+        const diskEl = document.getElementById('disk-load');
+        diskEl.innerText = disk + '%';
+        diskEl.className = disk > 85 ? 'down' : '';
+
+        document.getElementById('net-sent').innerText = (data.stats.net_sent_mb ?? '--') + 'MB';
+        document.getElementById('net-recv').innerText = (data.stats.net_recv_mb ?? '--') + 'MB';
         document.getElementById('cmd-count').innerText = data.stats.commands ?? '0';
+
+        // Update Portfolio
+        if (data.portfolio && data.portfolio.equity) {
+          document.getElementById('portfolio-equity').innerText = '$' + data.portfolio.equity;
+          const pl = data.portfolio.day_pl ?? '--';
+          const plEl = document.getElementById('portfolio-pl');
+          plEl.innerText = 'Day P/L: ' + pl;
+          plEl.style.color = pl.startsWith('+') ? '#4ade80' : pl.startsWith('-') ? '#f87171' : '#00FFFF';
+          const positions = data.portfolio.positions ?? [];
+          document.getElementById('portfolio-positions').innerHTML = positions.map(p =>
+            `<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span>${p.symbol}</span>
+              <span style="color:${p.pl && p.pl.startsWith('+') ? '#4ade80' : '#f87171'}">${p.pl}</span>
+            </div>`
+          ).join('');
+        }
       } 
       
       if (data.type === 'answer') {
