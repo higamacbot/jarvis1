@@ -234,13 +234,15 @@ User: {user_msg}
 JARVIS:"""
 
     try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(OLLAMA_URL, json={"model": MODEL, "prompt": full_prompt, "stream": False})
             answer = response.json().get("response", "Neural logic error, sir.").strip()
             await asyncio.to_thread(track_usage, full_prompt, answer)
             return answer
+    except asyncio.TimeoutError:
+        return "Query timeout — Ollama processing too long. Try a simpler question, sir."
     except Exception as e:
-        return f"Neural Link Error: {e}"
+        return f"Neural Link Error: {str(e)[:100]}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FASTAPI & WEBSOCKET

@@ -53,6 +53,10 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
     if bot_id == "roundtable":
         return await ask_fn(user_msg, system_override=ROUNDTABLE_PROMPT)
 
+    # Jarvis uses default system prompt (same as main /ws endpoint)
+    if bot_id == "jarvisbot":
+        return await ask_fn(user_msg)
+
     bot = BOT_MAP.get(bot_id)
     if not bot:
         return f"Unknown bot: {bot_id}"
