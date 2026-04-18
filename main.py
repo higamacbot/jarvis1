@@ -8,6 +8,7 @@ import subprocess
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -20,6 +21,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import memory
 from youtube_tools import handle_youtube_request
 from trading import is_trade_command, parse_trade_intent, execute_trade_intent, get_trade_history
+from bots.router import route_message
 from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, analyze_ticker, analyze_portfolio
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -332,6 +334,54 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json({"type": "answer", "text": reply})
 
     except WebSocketDisconnect: pass
+
+
+@app.get("/house")
+async def serve_house():
+    return FileResponse("frontend/house.html")
+
+@app.websocket("/ws/house")
+async def house_websocket(websocket: WebSocket):
+    await websocket.accept()
+    print(">> HIGA HOUSE: Client connected.")
+
+    async def broadcaster():
+        try:
+            while True:
+                uptime = time.strftime("%H:%M:%S", time.gmtime(time.time() - start_time))
+                stock_list = [
+                    {"symbol": k, "price": v["price"], "change": "LIVE"}
+                    for k, v in latest_market_data.items()
+                ]
+                await websocket.send_json({
+                    "type": "telemetry",
+                    "stocks": stock_list or [{"symbol": "SYNCING", "price": "...", "change": ""}],
+                    "stats": {
+                        "uptime": uptime,
+                        "load": round(psutil.cpu_percent()),
+                        "ram": round(psutil.virtual_memory().percent),
+                    },
+                    "portfolio": latest_portfolio,
+                })
+                await asyncio.sleep(3)
+        except Exception:
+            pass
+
+    asyncio.create_task(broadcaster())
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            bot_id   = data.get("bot", "jarvisbot")
+            user_msg = data.get("message", "").strip()
+            if not user_msg:
+                continue
+            await websocket.send_json({"type": "thinking", "bot": bot_id})
+            reply = await route_message(bot_id, user_msg, ask_ollama)
+            memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+            await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+    except WebSocketDisconnect:
+        print(">> HIGA HOUSE: Client disconnected.")
 
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 

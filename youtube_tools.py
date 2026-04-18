@@ -32,7 +32,7 @@ def extract_video_id(video_input: str) -> str:
 # SEARCH
 # ─────────────────────────────────────────────────────────────────────────────
 
-def search_youtube(query: str, max_results: int = 5) -> list | dict:
+def search_youtube(query: str, max_results: int = 5) -> list:
     try:
         youtube = get_youtube_client()
         response = youtube.search().list(
@@ -104,7 +104,7 @@ def sanitize_filename(name: str) -> str:
     return name.strip()[:80]
 
 
-def save_transcript_pdf(video_id: str, title: str, channel: str, transcript_text: str) -> str | None:
+def save_transcript_pdf(video_id: str, title: str, channel: str, transcript_text: str) -> str:
     try:
         base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "transcripts")
         channel_dir = os.path.join(base_dir, sanitize_filename(channel))
@@ -172,7 +172,7 @@ def get_transcript(video_input: str, max_chars: int = 12000) -> dict:
 # COMMENTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def get_top_comments(video_input: str, max_results: int = 5) -> list | dict:
+def get_top_comments(video_input: str, max_results: int = 5) -> list:
     try:
         video_id = extract_video_id(video_input)
         youtube = get_youtube_client()
@@ -202,7 +202,7 @@ def get_top_comments(video_input: str, max_results: int = 5) -> list | dict:
 # ROUTER — called by main.py to detect and handle YouTube requests
 # ─────────────────────────────────────────────────────────────────────────────
 
-def handle_youtube_request(question: str) -> tuple[str | None, str | None]:
+def handle_youtube_request(question: str) -> tuple[str, str]:
     q = question.lower().strip()
     url_match = re.search(
         r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=[A-Za-z0-9_-]{11}[^\s]*|youtu\.be/[A-Za-z0-9_-]{11}[^\s]*))",
