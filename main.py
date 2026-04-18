@@ -211,14 +211,16 @@ async def fetch_alpaca():
 # OLLAMA LOGIC
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def ask_ollama(user_msg: str, extra_context: str = "", timeout: float = 90.0) -> str:
+async def ask_ollama(user_msg: str, extra_context: str = "", timeout: float = 90.0, system_override: str = None) -> str:
     market_str = ", ".join([f"{k}: ${v['price']}" for k, v in latest_market_data.items()]) or "No market data."
     metrics = get_system_metrics()
     system_stats = f"CPU: {metrics['cpu_total']}% | RAM: {metrics['ram_used_gb']}GB | Uptime: {metrics['uptime']}"
     trade_hist = get_trade_history(limit=5)
     memory_block = await asyncio.to_thread(memory.get_memory_context)
     
-    full_prompt = f"""{SYSTEM_PROMPT}
+    sys_prompt = system_override if system_override else SYSTEM_PROMPT
+    
+    full_prompt = f"""{sys_prompt}
 --- LIVE DATA ---
 CRYPTO: {market_str}
 SYSTEM: {system_stats}
