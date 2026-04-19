@@ -173,3 +173,5 @@
 ### Apr 19, 2026 @ 12:03 PM — Debate room: clicking arena opens debateroom bot which runs all 3 personas. Roundtable shows shaman/libmom/magadad as subpoints under DEBATE ROOM.
 
 ### Apr 19, 2026 @ 12:06 PM — Debate arena: bots animate into arena on click, rooms flash yellow while waiting, debate personas use fiction framing to avoid Ollama refusals
+
+### Apr 19, 2026 @ 12:08 PM — Room color: flashes yellow while waiting for response, restores after answer. Debate persona prompt fixed to avoid Ollama refusal.
