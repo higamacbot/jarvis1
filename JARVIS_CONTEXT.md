@@ -105,3 +105,9 @@
 # Ollama:   Paste this file content at the start of your session prompt
 # Always tell the AI: "Do not create new files unless absolutely necessary.
 #                      Check what already exists in fetch.py, youtube_tools.py first."
+
+### Apr 19, 2026 — Doctorbot assigned as git/context owner
+- Doctorbot now owns JARVIS_CONTEXT.md updates and all git commits
+- Has functions: git_status(), git_commit_and_push(), log_to_context(), read_context()
+- All future fixes should be logged via Doctorbot before committing
+- .gitignore created: blocks keys.py, *.db, router_broken.py, market_scraper.py, news_scraper.py
