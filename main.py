@@ -408,6 +408,25 @@ async def house_websocket(websocket: WebSocket):
             if not user_msg:
                 continue
             await websocket.send_json({"type": "thinking", "bot": bot_id})
+
+            # News PATH (jarvisbot only) 
+            from news_sources import NEWS_TRIGGERS, get_site_sources
+            from fetch import fetch_source_context
+            if bot_id == "jarvisbot" and any(t in user_msg.lower() for t in NEWS_TRIGGERS):
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": "Scanning news sources, sir..."})
+                sources = get_site_sources()[:3]
+                news_context = ""
+                for src in sources:
+                    try:
+                        url, text = await asyncio.to_thread(fetch_source_context, src["url"])
+                        news_context += f"\n--- {src['name']} ---\n{text[:800]}\n"
+                    except Exception:
+                        news_context += f"\n--- {src['name']} --- (unavailable)\n"
+                reply = await ask_ollama(user_msg, extra_context=news_context)
+                memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                continue
+
             reply = await route_message(bot_id, user_msg, ask_ollama)
             memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
             await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
