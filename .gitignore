@@ -9,3 +9,12 @@ news_scraper.py
 kraken_vscode_settings.json
 *.pytest*
 higabot-dashboard/keys.txt
+check_balance.py
+check_portfolio.py
+detailed_account_check.py
+free_buying_power.py
+margin_analysis.py
+portfolio_solution.py
+sync_portfolio_minimal.py
+test_briefing.py
+bots/router_broken.py
