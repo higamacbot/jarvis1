@@ -113,3 +113,7 @@
 - .gitignore created: blocks keys.py, *.db, router_broken.py, market_scraper.py, news_scraper.py
 
 ### Apr 19, 2026 @ 06:55 AM — Doctorbot v2 deployed — auto-logging every commit and context access
+
+### Apr 19, 2026 @ 07:01 AM — fix: resolve ROUNDTABLE Neural Link Error and keys.py attribute names
+
+### Apr 19, 2026 @ 07:02 AM — FIXED: keys.py renamed ALPACA_API_KEY->ALPACA_KEY and ALPACA_SECRET_KEY->ALPACA_SECRET. ROUNDTABLE Neural Link Error resolved.
