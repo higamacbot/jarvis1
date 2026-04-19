@@ -33,6 +33,9 @@ BOT_REGISTRY = {
     "higashop": {"name": "HIGASHOP", "icon": "🛍️"},
     "technoid": {"name": "TECHNOID", "icon": "🖥️"},
     "teacherbot": {"name": "TEACHERBOT", "icon": "📚"},
+    "shaman":     {"name": "SHAMAN",   "icon": "🧿"},
+    "libmom":     {"name": "LIB MOM",  "icon": "🟦"},
+    "magadad":    {"name": "MAGA DAD", "icon": "🟥"},
     "roundtable": {"name": "ROUNDTABLE", "icon": "🧠"},
 }
 
@@ -48,6 +51,9 @@ DEFAULT_TASKS = {
     "higashop": "Waiting for next task.",
     "technoid": "Monitoring hardware status.",
     "teacherbot": "Waiting for next task.",
+    "shaman":     "Awaiting debate topic.",
+    "libmom":     "Awaiting debate topic.",
+    "magadad":    "Awaiting debate topic.",
     "roundtable": "Waiting for next task.",
 }
 
@@ -63,6 +69,9 @@ BOT_MODULES = {
     "higashop": "bots.higashop",
     "technoid": "bots.technoid",
     "teacherbot": "bots.teacherbot",
+    "shaman":     "bot_orchestrator",
+    "libmom":     "bot_orchestrator",
+    "magadad":    "bot_orchestrator",
 }
 
 DEBATE_PERSONAS = {
