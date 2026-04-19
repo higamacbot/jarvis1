@@ -20,3 +20,4 @@ test_briefing.py
 bots/router_broken.py
 .doctorbot_status.json
 jarvis.log
+.windsurfrules
