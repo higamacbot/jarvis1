@@ -169,3 +169,5 @@
 ### Apr 19, 2026 @ 11:47 AM — Debate bots added to orchestrator registry - shaman/libmom/magadad now show in /api/bots/status and get room colors
 
 ### Apr 19, 2026 @ 11:58 AM — Fixed: roundtable prompt no longer echoes bracket instructions. Debate arena click now engages shaman+libmom+magadad simultaneously.
+
+### Apr 19, 2026 @ 12:03 PM — Debate room: clicking arena opens debateroom bot which runs all 3 personas. Roundtable shows shaman/libmom/magadad as subpoints under DEBATE ROOM.
