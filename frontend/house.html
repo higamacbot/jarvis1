@@ -476,8 +476,16 @@ function connect(){
         addMsg('bot',data.text,ansBot);
       }
       // Restore room color after response
+      // Flash green when response arrives, then fade to blue after 2s
       const doneRoom=document.getElementById('room-'+ansBot);
-      if(doneRoom){doneRoom.style.borderColor=doneRoom.dataset.prevBorder||'';doneRoom.style.boxShadow='';}
+      if(doneRoom){
+        doneRoom.style.borderColor='#006600';
+        doneRoom.style.boxShadow='0 0 14px rgba(0,255,100,0.7)';
+        setTimeout(()=>{
+          doneRoom.style.borderColor='#0044AA';
+          doneRoom.style.boxShadow='0 0 10px rgba(0,100,255,0.4)';
+        },2000);
+      }
     }
   };
   ws.onclose=()=>{
