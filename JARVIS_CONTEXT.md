@@ -134,3 +134,12 @@
 ### Apr 19, 2026 @ 07:14 AM — Roundtable prompt upgraded — each agent now gives full paragraph updates in their own voice
 
 ### Apr 19, 2026 @ 07:14 AM — Roundtable prompt updated — response length now scales to actual update size, no padding
+
+### Apr 19, 2026 — Roundtable prompt behavior documented
+- Each bot responds based on what they actually have to report
+- No update = 1 sentence "No update."
+- Small update = 1-2 sentences
+- Big update = 3-4 sentence paragraph
+- Roundtable has real portfolio data injected (crypto $466, stocks, all brokers)
+- Cryptoid shows real P/L numbers in roundtable (BTC +$56.46, ETH -$25.69 etc)
+- Do NOT change roundtable prompt without reading this note first
