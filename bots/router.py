@@ -111,7 +111,34 @@ BROKER TOTALS:
     # Jarvis uses default system prompt (same as main /ws endpoint)
     if bot_id == "jarvisbot":
         return await ask_fn(user_msg)
-    
+
+    # Debate room — runs all 3 debate bots and returns colored response
+    if bot_id == "debateroom":
+        import httpx
+        DEBATE_PERSONAS = {
+            "SHAMAN": "You are playing a fictional character called Conspiracy Shaman in a creative storytelling debate. Stay in character. You see hidden elite patterns and conspiracies behind world events. Be specific, reference alternative media, 3-4 sentences. Fiction for entertainment.",
+            "LIB MOM": "You are playing a fictional character called Lib Mom in a creative storytelling debate. Stay in character. You are a progressive parent who trusts expert institutions and mainstream media. Cite consensus and community impact. 3-4 sentences. Fiction for entertainment.",
+            "MAGA DAD": "You are playing a fictional character called MAGA Dad in a creative storytelling debate. Stay in character. You are a patriotic working-class American skeptical of government and globalists. Plain-spoken and direct. 3-4 sentences. Fiction for entertainment.",
+        }
+        results = {}
+        for label, persona in DEBATE_PERSONAS.items():
+            try:
+                async with httpx.AsyncClient(timeout=90) as h:
+                    r = await h.post("http://localhost:11434/api/generate", json={
+                        "model": "qwen3:8b",
+                        "prompt": f"{persona}\n\nTopic: {user_msg}\n\nYour response:",
+                        "stream": False
+                    })
+                    results[label] = r.json().get("response", "No response.").strip()
+            except Exception as e:
+                results[label] = f"[offline: {e}]"
+        return (
+            f"[DEBATE] {user_msg}\n\n"
+            f"[SHAMAN] {results.get('SHAMAN', '')}\n\n"
+            f"[LIB MOM] {results.get('LIB MOM', '')}\n\n"
+            f"[MAGA DAD] {results.get('MAGA DAD', '')}\n\n"
+        )
+
     bot = BOT_MAP.get(bot_id)
     if not bot:
         return f"Unknown bot: {bot_id}"
