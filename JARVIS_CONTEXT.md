@@ -117,3 +117,10 @@
 ### Apr 19, 2026 @ 07:01 AM — fix: resolve ROUNDTABLE Neural Link Error and keys.py attribute names
 
 ### Apr 19, 2026 @ 07:02 AM — FIXED: keys.py renamed ALPACA_API_KEY->ALPACA_KEY and ALPACA_SECRET_KEY->ALPACA_SECRET. ROUNDTABLE Neural Link Error resolved.
+
+### Apr 19, 2026 — MISTAKE: keys.py wrong attribute names
+- keys.py had ALPACA_API_KEY and ALPACA_SECRET_KEY
+- main.py was looking for ALPACA_KEY and ALPACA_SECRET
+- Caused "module 'keys' has no attribute 'ALPACA_KEY'" warning every boot
+- Fix: sed rename in keys.py — now verified and handshake passes
+- NOTE: keys.py is gitignored — this fix only lives locally
