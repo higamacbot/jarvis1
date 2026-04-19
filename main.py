@@ -324,6 +324,26 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
 
             # YOUTUBE PATH
+            # ── NEWS PATH ────────────────────────────────────────────────
+            from news_sources import NEWS_TRIGGERS, get_site_sources
+            from fetch import fetch_source_context
+            if any(t in user_msg.lower() for t in NEWS_TRIGGERS):
+                await websocket.send_json({"type": "answer", "text": "Scanning news sources..."})
+                sources = get_site_sources()[:3]  # AP, BBC, Al Jazeera
+                news_context = ""
+                for src in sources:
+                    try:
+                        url, text = await asyncio.to_thread(fetch_source_context, src["url"])
+                        news_context += f"\n--- {src['name']} ---\n{text[:800]}\n"
+                    except Exception as e:
+                        news_context += f"\n--- {src['name']} --- (unavailable)\n"
+                reply = await ask_ollama(user_msg, extra_context=news_context)
+                memory.save_conversation("user", user_msg)
+                memory.save_conversation("jarvis", memory.extract_summary(reply))
+                await asyncio.to_thread(speak, reply)
+                await websocket.send_json({"type": "answer", "text": reply})
+                continue
+
             yt_result, yt_mode = await asyncio.to_thread(handle_youtube_request, user_msg)
             if yt_result and yt_mode == "youtube_summarize":
                 await websocket.send_json({"type": "answer", "text": "Fetching and analyzing video..."})
