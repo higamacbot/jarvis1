@@ -132,3 +132,5 @@
 ### Apr 19, 2026 @ 07:09 AM — MILESTONE: Roundtable fully operational with real portfolio data. Cryptoid showing BTC +$56.46, ETH -$25.69 in group sessions.
 
 ### Apr 19, 2026 @ 07:14 AM — Roundtable prompt upgraded — each agent now gives full paragraph updates in their own voice
+
+### Apr 19, 2026 @ 07:14 AM — Roundtable prompt updated — response length now scales to actual update size, no padding
