@@ -157,3 +157,5 @@
 ### Apr 19, 2026 @ 08:12 AM — YouTube handler moved to /ws/house endpoint - was incorrectly in /ws only
 
 ### Apr 19, 2026 @ 08:21 AM — YouTube functionality fully working in HIGA HOUSE - API key configured, video analysis, transcripts, comments all operational
+
+### Apr 19, 2026 @ 09:13 AM — YouTube transcript PDFs now save into per-channel folders from summarize/transcript paths
