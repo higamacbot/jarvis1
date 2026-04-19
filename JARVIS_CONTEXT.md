@@ -165,3 +165,5 @@
 ### Apr 19, 2026 @ 11:39 AM — Bot orchestrator deployed: persistent status, task queue, debate engine, /bots /assign /debate commands, REST API endpoints
 
 ### Apr 19, 2026 @ 11:45 AM — MILESTONE: Debate room live — Shaman (conspiracy room), Lib Mom, MAGA Dad added to HIGA HOUSE grid rows 5-6. Room colors polling /api/bots/status every 3s. /debate command triggers all three bots via Ollama.
+
+### Apr 19, 2026 @ 11:47 AM — Debate bots added to orchestrator registry - shaman/libmom/magadad now show in /api/bots/status and get room colors
