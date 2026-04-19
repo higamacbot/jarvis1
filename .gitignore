@@ -18,3 +18,4 @@ portfolio_solution.py
 sync_portfolio_minimal.py
 test_briefing.py
 bots/router_broken.py
+.doctorbot_status.json
