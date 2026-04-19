@@ -264,6 +264,31 @@ function selectBot(id){
   document.getElementById('sbtn').style.color=bot.color;
   document.getElementById('minput').placeholder=`COMMAND FOR ${bot.name}...`;
   addMsg('sys',`[ ${bot.name} ENGAGED ]`,id);
+
+  // Animate debate bots into arena when debate room clicked
+  if(id==='debateroom'){
+    const arenaEl=document.getElementById('room-debateroom');
+    if(arenaEl){
+      const arenaRect=arenaEl.getBoundingClientRect();
+      const gridRect=document.getElementById('hgrid').getBoundingClientRect();
+      const destX=arenaRect.left - gridRect.left + arenaRect.width/2;
+      const destY=arenaRect.top  - gridRect.top  + arenaRect.height/2;
+      ['shaman','libmom','magadad'].forEach((bid,i)=>{
+        const b=BA[bid];
+        if(b){ b.tx=destX - (arenaRect.left-gridRect.left); b.ty=destY - (arenaRect.top-gridRect.top); b.wt=9999; }
+        // Flash their rooms yellow while waiting
+        const rm=document.getElementById('room-'+bid);
+        if(rm){ rm.style.borderColor='#AA8800'; rm.style.boxShadow='0 0 10px rgba(255,200,0,0.6)'; }
+      });
+    }
+  } else {
+    // If leaving debate room, let bots wander back
+    if(['shaman','libmom','magadad'].includes(id)===false){
+      ['shaman','libmom','magadad'].forEach(bid=>{
+        const b=BA[bid]; if(b){ b.wt=0; }
+      });
+    }
+  }
 }
 setTimeout(()=>selectBot('jarvisbot'),200);
 
