@@ -179,3 +179,5 @@
 ### Apr 19, 2026 @ 12:12 PM — Debate room: colored responses per persona (shaman=pink, lib=blue, maga=red, topic=orange). Arena glows orange on click. Debate bot rooms flash yellow while waiting.
 
 ### Apr 19, 2026 @ 06:49 PM — Debate arena: 3 bots drawn at chairs around debate table inside arena canvas. Own rooms show IN ARENA when debate active.
+
+### Apr 19, 2026 @ 06:50 PM — Room status colors: yellow while thinking, green flash on response ready, blue after 2s idle
