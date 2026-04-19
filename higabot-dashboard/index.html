@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HIGABOT Trading Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+        }
+        
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 20px;
+            border: 2px solid #00ff00;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            color: #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .panel {
+            border: 1px solid #00ff00;
+            padding: 20px;
+            background: rgba(0, 255, 0, 0.05);
+        }
+        
+        .panel h2 {
+            color: #00ff00;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        
+        .position {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+        }
+        
+        .position:last-child {
+            border-bottom: none;
+        }
+        
+        .positive {
+            color: #00ff00;
+        }
+        
+        .negative {
+            color: #ff0000;
+        }
+        
+        .neutral {
+            color: #ffff00;
+        }
+        
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .metric {
+            text-align: center;
+            padding: 15px;
+            border: 1px solid #00ff00;
+            background: rgba(0, 255, 0, 0.05);
+        }
+        
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+        
+        .metric-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        .chart-container {
+            height: 300px;
+            margin-top: 20px;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        
+        .status.online {
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+        }
+        
+        .status.offline {
+            background: rgba(255, 0, 0, 0.2);
+            color: #ff0000;
+        }
+        
+        .refresh-btn {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            margin: 10px;
+        }
+        
+        .refresh-btn:hover {
+            background: #00cc00;
+        }
+        
+        .last-update {
+            text-align: center;
+            opacity: 0.7;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>ð HIGABOT TRADING DASHBOARD</h1>
+            <div class="status online" id="connection-status">ONLINE</div>
+            <button class="refresh-btn" onclick="refreshData()">REFRESH DATA</button>
+            <div class="last-update" id="last-update">Loading...</div>
+        </div>
+        
+        <div class="summary">
+            <div class="metric">
+                <div class="metric-value" id="total-equity">$0.00</div>
+                <div class="metric-label">TOTAL EQUITY</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="total-pl">$0.00</div>
+                <div class="metric-label">TOTAL P&L</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="alpaca-equity">$0.00</div>
+                <div class="metric-label">ALPACA EQUITY</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="kraken-equity">$0.00</div>
+                <div class="metric-label">KRAKEN EQUITY</div>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div class="panel">
+                <h2>ð ALPACA POSITIONS</h2>
+                <div id="alpaca-positions">
+                    <div class="position">Loading...</div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>ð KRAKEN POSITIONS</h2>
+                <div id="kraken-positions">
+                    <div class="position">Loading...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>ð LIVE PRICES</h2>
+            <div class="chart-container">
+                <canvas id="price-chart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let priceChart;
+        let updateInterval;
+        
+        async function fetchAlpacaData() {
+            try {
+                const response = await fetch('/api/alpaca');
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Alpaca API error:', error);
+                return { positions: [], equity: 0, day_pl: 0 };
+            }
+        }
+        
+        async function fetchKrakenData() {
+            try {
+                const response = await fetch('/api/kraken');
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Kraken API error:', error);
+                return { positions: [], equity: 0, unrealized_pl: 0 };
+            }
+        }
+        
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(amount);
+        }
+        
+        function getPLClass(pl) {
+            if (pl > 0) return 'positive';
+            if (pl < 0) return 'negative';
+            return 'neutral';
+        }
+        
+        function updateAlpacaPanel(data) {
+            const container = document.getElementById('alpaca-positions');
+            document.getElementById('alpaca-equity').textContent = formatCurrency(data.equity || 0);
+            
+            if (!data.positions || data.positions.length === 0) {
+                container.innerHTML = '<div class="position">No positions</div>';
+                return;
+            }
+            
+            container.innerHTML = data.positions.map(pos => `
+                <div class="position">
+                    <span>${pos.symbol}</span>
+                    <span class="${getPLClass(pos.unrealized_pl)}">
+                        ${pos.qty} @ ${formatCurrency(pos.avg_entry_price)} | 
+                        P&L: ${formatCurrency(pos.unrealized_pl)}
+                    </span>
+                </div>
+            `).join('');
+        }
+        
+        function updateKrakenPanel(data) {
+            const container = document.getElementById('kraken-positions');
+            document.getElementById('kraken-equity').textContent = formatCurrency(data.equity || 0);
+            
+            if (!data.positions || data.positions.length === 0) {
+                container.innerHTML = '<div class="position">No positions</div>';
+                return;
+            }
+            
+            container.innerHTML = data.positions.map(pos => `
+                <div class="position">
+                    <span>${pos.symbol}</span>
+                    <span class="${getPLClass(pos.unrealized_pl)}">
+                        ${pos.volume} | 
+                        P&L: ${formatCurrency(pos.unrealized_pl || 0)}
+                    </span>
+                </div>
+            `).join('');
+        }
+        
+        function updateSummary(alpacaData, krakenData) {
+            const totalEquity = (alpacaData.equity || 0) + (krakenData.equity || 0);
+            const totalPL = (alpacaData.day_pl || 0) + (krakenData.unrealized_pl || 0);
+            
+            document.getElementById('total-equity').textContent = formatCurrency(totalEquity);
+            document.getElementById('total-pl').textContent = formatCurrency(totalPL);
+            document.getElementById('total-pl').className = `metric-value ${getPLClass(totalPL)}`;
+        }
+        
+        function initChart() {
+            const ctx = document.getElementById('price-chart').getContext('2d');
+            priceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'BTC',
+                        data: [],
+                        borderColor: '#ff9900',
+                        backgroundColor: 'rgba(255, 153, 0, 0.1)',
+                        tension: 0.1
+                    }, {
+                        label: 'ETH',
+                        data: [],
+                        borderColor: '#627eea',
+                        backgroundColor: 'rgba(98, 126, 234, 0.1)',
+                        tension: 0.1
+                    }, {
+                        label: 'DOGE',
+                        data: [],
+                        borderColor: '#c2a633',
+                        backgroundColor: 'rgba(194, 166, 51, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(0, 255, 0, 0.1)' },
+                            ticks: { color: '#00ff00' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(0, 255, 0, 0.1)' },
+                            ticks: { color: '#00ff00' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#00ff00' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        async function refreshData() {
+            try {
+                document.getElementById('connection-status').textContent = 'UPDATING...';
+                
+                const [alpacaData, krakenData] = await Promise.all([
+                    fetchAlpacaData(),
+                    fetchKrakenData()
+                ]);
+                
+                updateAlpacaPanel(alpacaData);
+                updateKrakenPanel(krakenData);
+                updateSummary(alpacaData, krakenData);
+                
+                document.getElementById('connection-status').textContent = 'ONLINE';
+                document.getElementById('last-update').textContent = 
+                    `Last update: ${new Date().toLocaleString()}`;
+                
+            } catch (error) {
+                console.error('Refresh error:', error);
+                document.getElementById('connection-status').textContent = 'ERROR';
+            }
+        }
+        
+        function startAutoRefresh() {
+            refreshData();
+            updateInterval = setInterval(refreshData, 30000); // 30 seconds
+        }
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            startAutoRefresh();
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# KRAKEN API KEYS
+# Add your Kraken API keys here for the dashboard
+# Format: KRAKEN_KEY=your_key_here
+#         KRAKEN_SECRET=your_secret_here
+
+# Replace the placeholder values below with your actual keys:
+KRAKEN_KEY=your_kraken_api_key_here
+KRAKEN_SECRET=your_kraken_api_secret_here
+
+# Keep this file secure and never share it!

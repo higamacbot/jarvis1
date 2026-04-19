@@ -64,6 +64,13 @@ try:
     print(">> SECURITY HANDSHAKE: KEYS VERIFIED.")
 except Exception as e:
     print(f">> WARNING: keys.py not found or invalid: {e}")
+    # FALLBACK TO ENVIRONMENT VARIABLES
+    ALPACA_KEY    = os.getenv("ALPACA_KEY")
+    ALPACA_SECRET = os.getenv("ALPACA_SECRET")
+    if ALPACA_KEY and ALPACA_SECRET:
+        print(">> SECURITY HANDSHAKE: ENVIRONMENT VARIABLES VERIFIED.")
+    else:
+        print(">> WARNING: NO ALPACA CREDENTIALS FOUND")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATE
