@@ -8,3 +8,4 @@ market_scraper.py
 news_scraper.py
 kraken_vscode_settings.json
 *.pytest*
+higabot-dashboard/keys.txt
