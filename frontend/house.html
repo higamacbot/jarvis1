@@ -335,6 +335,9 @@ function send(){
   const text=inp.value.trim();
   if(!text||!ws||ws.readyState!==WebSocket.OPEN)return;
   addMsg('user',text,curBot);inp.value='';inp.style.height='auto';
+  // Flash current bot room yellow while waiting for response
+  const waitRoom=document.getElementById('room-'+curBot);
+  if(waitRoom){waitRoom.dataset.prevBorder=waitRoom.style.borderColor||'';waitRoom.style.borderColor='#AA8800';waitRoom.style.boxShadow='0 0 12px rgba(255,200,0,0.6)';}
   showThink();ws.send(JSON.stringify({bot:curBot,message:text}));
 }
 inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
@@ -372,7 +375,12 @@ function connect(){
       }
       return;
     }
-    if(data.type==='answer'){hideThink();addMsg('bot',data.text,data.bot||curBot);}
+    if(data.type==='answer'){
+      hideThink();addMsg('bot',data.text,data.bot||curBot);
+      // Restore room color after response (status polling will take over in 3s)
+      const doneRoom=document.getElementById('room-'+(data.bot||curBot));
+      if(doneRoom){doneRoom.style.borderColor=doneRoom.dataset.prevBorder||'';doneRoom.style.boxShadow='';}
+    }
   };
   ws.onclose=()=>{
     const d=document.getElementById('cdot');d.style.background='var(--red)';d.style.boxShadow='0 0 8px var(--red)';
