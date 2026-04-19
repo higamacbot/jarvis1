@@ -161,3 +161,5 @@
 ### Apr 19, 2026 @ 09:13 AM — YouTube transcript PDFs now save into per-channel folders from summarize/transcript paths
 
 ### Apr 19, 2026 @ 09:16 AM — YouTube transcripts now save to Obsidian vault per-channel folders with PDF and markdown note output
+
+### Apr 19, 2026 @ 11:39 AM — Bot orchestrator deployed: persistent status, task queue, debate engine, /bots /assign /debate commands, REST API endpoints
