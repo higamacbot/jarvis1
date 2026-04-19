@@ -161,10 +161,7 @@ LAYOUT.forEach(r=>{
   div.innerHTML=`<div class="cdec tl"></div><div class="cdec tr"></div><div class="cdec bl"></div><div class="cdec br"></div><div class="rlabel">${bot.label}</div><canvas class="rcanvas" id="cv-${r.id}"></canvas>`;
   div.addEventListener('click',()=>{
     if(r.id==='debateroom'){
-      selectBot('shaman');
-      setTimeout(()=>selectBot('libmom'),100);
-      setTimeout(()=>selectBot('magadad'),200);
-      setTimeout(()=>selectBot('debateroom'),300);
+      selectBot('debateroom');
     } else {
       selectBot(r.id);
     }

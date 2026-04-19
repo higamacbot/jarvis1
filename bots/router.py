@@ -24,6 +24,7 @@ BOT_MAP = {
     "higashop": higashop,
     "technoid": technoid,
     "teacherbot": teacherbot,
+    "debateroom":  teacherbot,  # placeholder — overridden by debate handler above
     "pinkslip": pinkslip,
     "jarvisbot": jarvisbot,
 }
@@ -55,6 +56,12 @@ HIGASHOP: <your shop update here>
 TECHNOID: <your hardware update here>
 
 TEACHERBOT: <your education update here>
+
+DEBATE ROOM: [One combined response. Format as 3 quick subpoints:
+- SHAMAN says: <1 sentence conspiracy/pattern take on the topic>
+- LIB MOM says: <1 sentence progressive take on the topic>
+- MAGA DAD says: <1 sentence patriot take on the topic>
+Keep it brief — they are listening at the roundtable, not debating. Save full debate for /debate command.]
 
 Response length per bot is based on what they actually have to report: if no update, say "No update." in one sentence. If small update, 1-2 sentences. If significant activity or analysis, write a full 3-4 sentence paragraph. Never pad or fabricate updates just to fill space. Use real numbers from portfolio data when available."""
 
