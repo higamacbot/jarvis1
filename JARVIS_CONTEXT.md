@@ -151,3 +151,5 @@
 ### Apr 19, 2026 @ 07:46 AM — News fetching wired into main.py — triggers on news/headlines keywords, scrapes AP+BBC+AlJazeera via fetch.py
 
 ### Apr 19, 2026 @ 07:59 AM — News handler moved to /ws/house endpoint - was incorrectly in /ws only
+
+### Apr 19, 2026 @ 08:03 AM — MILESTONE: News fully working on both /ws and /ws/house endpoints. AP, BBC, Al Jazeera scraping live via fetch.py. JARVIS summarizes via Ollama.
