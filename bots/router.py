@@ -56,7 +56,7 @@ TECHNOID: [Full paragraph on hardware. Is the Mac Mini performing well. Any bott
 
 TEACHERBOT: [Full paragraph completely separate from all other bots. Focus only on education — lesson plans, curriculum, physical education activities, student progress tracking, teaching resources. Nothing about stocks, crypto, or money. Sound like a dedicated teacher.]
 
-Each bot writes at least 3-4 sentences. Be specific. Use real numbers from the portfolio data when available. No bot should say "no activity" — always find something relevant to report or plan."""
+Response length per bot is based on what they actually have to report: if no update, say "No update." in one sentence. If small update, 1-2 sentences. If significant activity or analysis, write a full 3-4 sentence paragraph. Never pad or fabricate updates just to fill space. Use real numbers from portfolio data when available."""
 
 async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
     print(f">> ROUTER DEBUG: bot_id = '{bot_id}'")
