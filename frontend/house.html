@@ -185,6 +185,14 @@ function drawRoom(id){
   const bot=BOTS[id];
   const isAct=curBot===id;
   if(id==='roundtable'){drawRT(ctx,W,H,isAct);return;}
+  if(id==='debateroom'){drawDebateArena(ctx,W,H);return;}
+  // Hide debate bots from their own rooms when debate arena is active
+  if(['shaman','libmom','magadad'].includes(id)&&curBot==='debateroom'){
+    ctx.font="7px 'Share Tech Mono',monospace";
+    ctx.fillStyle=BOTS[id].color+'55';
+    ctx.textAlign='center';ctx.fillText('IN ARENA',W/2,H/2);
+    return;
+  }
   const b=BA[id];if(!b)return;
   if(b.x===0){b.x=W/2;b.y=H/2;b.tx=W/2;b.ty=H/2;}
   const dx=b.tx-b.x,dy=b.ty-b.y,dist=Math.sqrt(dx*dx+dy*dy);
@@ -223,6 +231,62 @@ function drawRoom(id){
   ctx.fillStyle=bot.color;ctx.textBaseline='alphabetic';
   ctx.shadowColor=bot.color;ctx.shadowBlur=4;
   ctx.fillText(id==='jarvisbot'?'jarvis':id,bx,by+bH+bH*.65+9);ctx.shadowBlur=0;
+}
+
+function drawDebateArena(ctx,W,H){
+  // Draw table in center
+  const cx=W/2,cy=H/2;
+  ctx.beginPath();ctx.ellipse(cx,cy,W*.28,H*.2,0,0,Math.PI*2);
+  ctx.strokeStyle='#FF6B35';ctx.lineWidth=1.5;ctx.globalAlpha=0.4;ctx.stroke();
+  ctx.globalAlpha=0.08;ctx.fillStyle='#FF6B35';ctx.fill();ctx.globalAlpha=1;
+  ctx.font="7px 'Share Tech Mono',monospace";ctx.fillStyle='#FF6B35';
+  ctx.textAlign='center';ctx.fillText('DEBATE TABLE',cx,cy+3);
+
+  // 3 chair positions around table
+  const seats=[
+    {bid:'shaman', angle:-Math.PI/2,    label:'Sh', color:'#FF69B4'},
+    {bid:'libmom',  angle: Math.PI/6,   label:'Lm', color:'#4895EF'},
+    {bid:'magadad', angle: Math.PI*5/6, label:'Md', color:'#EF233C'},
+  ];
+
+  seats.forEach(seat=>{
+    const sx=cx+Math.cos(seat.angle)*(W*.35);
+    const sy=cy+Math.sin(seat.angle)*(H*.32);
+
+    // Draw chair
+    ctx.strokeStyle=seat.color;ctx.lineWidth=1;ctx.globalAlpha=0.3;
+    ctx.strokeRect(sx-8,sy-4,16,12);
+    ctx.globalAlpha=1;
+
+    // Draw bot at seat
+    const r=10;
+    const bobY=Math.sin(tick*0.045)*1.5;
+    const bx=sx,by=sy-r+bobY;
+
+    const g=ctx.createRadialGradient(bx,by,0,bx,by,r*2);
+    g.addColorStop(0,seat.color+'3a');g.addColorStop(1,'transparent');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(bx,by,r*2,0,Math.PI*2);ctx.fill();
+
+    ctx.beginPath();ctx.arc(bx,by,r,0,Math.PI*2);
+    ctx.fillStyle=seat.color+'2a';ctx.fill();
+    ctx.strokeStyle=seat.color;ctx.lineWidth=1.5;ctx.stroke();
+
+    ctx.fillStyle=seat.color;
+    ctx.font=`bold 8px 'Share Tech Mono',monospace`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.shadowColor=seat.color;ctx.shadowBlur=8;
+    ctx.fillText(seat.label,bx,by);ctx.shadowBlur=0;
+
+    // Body
+    ctx.fillStyle=seat.color+'2a';ctx.strokeStyle=seat.color;ctx.lineWidth=1;
+    ctx.fillRect(bx-3.5,by+r,7,r);ctx.strokeRect(bx-3.5,by+r,7,r);
+
+    // Name label
+    ctx.font=`6px 'Share Tech Mono',monospace`;
+    ctx.fillStyle=seat.color;ctx.shadowColor=seat.color;ctx.shadowBlur=4;
+    ctx.fillText(seat.bid==='libmom'?'libmom':seat.bid,bx,by+r*2+8);
+    ctx.shadowBlur=0;
+  });
 }
 
 function drawRT(ctx,W,H,isAct){
