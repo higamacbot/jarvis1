@@ -159,7 +159,16 @@ LAYOUT.forEach(r=>{
   div.style.gridColumn=`${r.col}/span ${r.w}`;
   div.style.gridRow=`${r.row}/span ${r.h}`;
   div.innerHTML=`<div class="cdec tl"></div><div class="cdec tr"></div><div class="cdec bl"></div><div class="cdec br"></div><div class="rlabel">${bot.label}</div><canvas class="rcanvas" id="cv-${r.id}"></canvas>`;
-  div.addEventListener('click',()=>selectBot(r.id));
+  div.addEventListener('click',()=>{
+    if(r.id==='debateroom'){
+      selectBot('shaman');
+      setTimeout(()=>selectBot('libmom'),100);
+      setTimeout(()=>selectBot('magadad'),200);
+      setTimeout(()=>selectBot('debateroom'),300);
+    } else {
+      selectBot(r.id);
+    }
+  });
   div.addEventListener('mouseenter',e=>showTT(e,bot.role));
   div.addEventListener('mouseleave',()=>{document.getElementById('tt').style.opacity='0';});
   grid.appendChild(div);
