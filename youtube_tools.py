@@ -147,7 +147,13 @@ def get_transcript(video_input: str, max_chars: int = 12000) -> dict:
         video_id = extract_video_id(video_input)
         ytt = YouTubeTranscriptApi()
         fetched = ytt.fetch(video_id)
-        full_text = " ".join([t['text'] for t in fetched])
+        # Handle FetchedTranscriptSnippet object properly
+        transcript_data = fetched.to_dict() if hasattr(fetched, 'to_dict') else fetched
+        if isinstance(transcript_data, dict) and 'transcript' in transcript_data:
+            transcript_list = transcript_data['transcript']
+        else:
+            transcript_list = transcript_data if isinstance(transcript_data, list) else []
+        full_text = " ".join([t['text'] for t in transcript_list])
 
         # Get video metadata for PDF
         info = get_video_info(video_input)
@@ -277,6 +283,8 @@ def handle_youtube_request(question: str) -> tuple[str, str]:
             context += f"Transcript:\n{transcript['transcript']}\n"
             if transcript.get("truncated"):
                 context += "[truncated]\n"
+            if transcript.get("pdf_path"):
+                context += f"PDF saved: {transcript['pdf_path']}\n"
         if isinstance(comments, list) and comments:
             context += "\nTop comments:\n" + "\n".join(
                 [f"- {c['author']}: {c['text']}" for c in comments]

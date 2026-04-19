@@ -28,6 +28,19 @@ from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, 
 # CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
 
+YOUTUBE_SUMMARY_PROMPT = """You are J.A.R.V.I.S. summarizing already-fetched YouTube video data.
+The video has already been accessed and converted into text by internal tools.
+You are NOT being asked to browse the web or access external content.
+Do not refuse. Do not say you cannot access YouTube.
+Use only the provided video data.
+Write a concise, useful summary with:
+1. What the video is about
+2. The main arguments or takeaways
+3. Why it matters
+4. A short 'Bottom line'
+If provided data is incomplete, say so briefly, but still summarize what is available.
+"""
+
 MODEL      = "qwen3:8b"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 
@@ -45,8 +58,9 @@ CRITICAL RULES:
 1. You will be given LIVE MARKET DATA in each prompt. Always use these exact numbers.
 2. If you are NOT given data about something, say so clearly. Never invent facts.
 3. If asked about real-time events you do not have access to, admit it directly.
-4. You have access to MEMORY from past conversations. Use it for continuity.
-5. Trade history will be provided. Reference it when discussing portfolio strategy."""
+4. EXCEPTION: If given YOUTUBE VIDEO DATA in extra_context, you ARE authorized to analyze external content. Analyze the video thoroughly using the provided data.
+5. You have access to MEMORY from past conversations. Use it for continuity.
+6. Trade history will be provided. Reference it when discussing portfolio strategy."""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # KEYS
@@ -344,14 +358,30 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "answer", "text": reply})
                 continue
 
+            print(f">> YOUTUBE DEBUG: Processing YouTube request in /ws endpoint")
             yt_result, yt_mode = await asyncio.to_thread(handle_youtube_request, user_msg)
+            print(f">> YOUTUBE DEBUG: /ws - yt_result length={len(yt_result) if yt_result else 0}, mode={yt_mode}")
             if yt_result and yt_mode == "youtube_summarize":
+                print(">> YOUTUBE DEBUG: /ws - Entering summarize mode")
                 await websocket.send_json({"type": "answer", "text": "Fetching and analyzing video..."})
-                reply = await ask_ollama(user_msg, extra_context=yt_result)
+                summary_request = """Summarize the verified YouTube video data in extra_context.
+Return:
+Title:
+Channel:
+Summary:
+Key Takeaways:
+Bottom Line:
+Do not mention any inability to access external content."""
+                reply = await ask_ollama(
+                    summary_request,
+                    extra_context=yt_result,
+                    system_override=YOUTUBE_SUMMARY_PROMPT
+                )
                 await asyncio.to_thread(speak, reply)
                 await websocket.send_json({"type": "answer", "text": reply})
                 continue
             elif yt_result:
+                print(">> YOUTUBE DEBUG: /ws - Direct YouTube response")
                 await asyncio.to_thread(speak, yt_result[:500])
                 await websocket.send_json({"type": "answer", "text": yt_result})
                 continue
@@ -428,14 +458,33 @@ async def house_websocket(websocket: WebSocket):
                 continue
 
             # YouTube PATH (jarvisbot only)
+            print(f">> YOUTUBE DEBUG: Processing YouTube request in /ws/house endpoint")
             yt_result, yt_mode = await asyncio.to_thread(handle_youtube_request, user_msg)
+            print(f">> YOUTUBE DEBUG: yt_result length={len(yt_result) if yt_result else 0}, mode={yt_mode}")
             if yt_result and yt_mode == "youtube_summarize":
+                print(">> YOUTUBE DEBUG: Entering summarize mode")
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": "Fetching and analyzing video..."})
-                reply = await ask_ollama(user_msg, extra_context=yt_result)
+                summary_request = """Summarize the verified YouTube video data in extra_context.
+Return:
+Title:
+Channel:
+Summary:
+Key Takeaways:
+Bottom Line:
+Do not mention any inability to access external content."""
+                reply = await ask_ollama(
+                    summary_request,
+                    extra_context=yt_result,
+                    system_override=YOUTUBE_SUMMARY_PROMPT
+                )
+                print(f">> YOUTUBE DEBUG: Ollama reply length={len(reply) if reply else 0}")
+                print(f">> YOUTUBE DEBUG: Ollama reply preview: {reply[:100] if reply else 'No reply'}...")
                 memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                print(">> YOUTUBE DEBUG: YouTube response sent, continuing...")
                 continue
             elif yt_result:
+                print(">> YOUTUBE DEBUG: Direct YouTube response")
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": yt_result})
                 continue
 
