@@ -149,3 +149,5 @@
 ### Apr 19, 2026 @ 07:25 AM — Briefing scheduler rewritten — real crypto P/L, agent-style voices, psutil system stats
 
 ### Apr 19, 2026 @ 07:46 AM — News fetching wired into main.py — triggers on news/headlines keywords, scrapes AP+BBC+AlJazeera via fetch.py
+
+### Apr 19, 2026 @ 07:59 AM — News handler moved to /ws/house endpoint - was incorrectly in /ws only
