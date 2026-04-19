@@ -145,3 +145,5 @@
 - Do NOT change roundtable prompt without reading this note first
 
 ### Apr 19, 2026 @ 07:20 AM — MILESTONE: Roundtable fully dialed in. All 11 agents responding with appropriate length updates. Cryptoid showing real P/L numbers. Teacherbot correctly isolated from financial data.
+
+### Apr 19, 2026 @ 07:25 AM — Briefing scheduler rewritten — real crypto P/L, agent-style voices, psutil system stats
