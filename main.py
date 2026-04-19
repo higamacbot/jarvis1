@@ -19,6 +19,7 @@ import uvicorn
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import memory
+from bot_orchestrator import orchestrator, register_routes, init_orchestrator_db
 from youtube_tools import handle_youtube_request
 from trading import is_trade_command, parse_trade_intent, execute_trade_intent, get_trade_history
 from bots.router import route_message
@@ -272,11 +273,18 @@ JARVIS:"""
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(memory.init_db)
-    tasks = [asyncio.create_task(fetch_crypto()), asyncio.create_task(fetch_alpaca())]
+    await asyncio.to_thread(init_orchestrator_db)
+    tasks = [
+        asyncio.create_task(fetch_crypto()),
+        asyncio.create_task(fetch_alpaca()),
+        asyncio.create_task(orchestrator.background_worker()),
+    ]
     yield
-    for t in tasks: t.cancel()
+    for t in tasks:
+        t.cancel()
 
 app = FastAPI(lifespan=lifespan)
+register_routes(app)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 @app.websocket("/ws")
@@ -292,7 +300,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     "type": "telemetry",
                     "stocks": [{"symbol": k, "price": v["price"], "change": "LIVE"} for k, v in latest_market_data.items()],
                     "stats": metrics,
-                    "portfolio": latest_portfolio
+                    "portfolio": latest_portfolio,
+                    "bot_status": orchestrator.get_all_statuses()
                 })
                 await asyncio.sleep(1)
         except: pass
@@ -309,6 +318,45 @@ async def websocket_endpoint(websocket: WebSocket):
             # FAST PATHS
             if user_msg.lower().startswith("/brief"):
                 reply = f"System online. CPU: {psutil.cpu_percent()}% | Portfolio: ${latest_portfolio.get('equity')}"
+                await websocket.send_json({"type": "answer", "text": reply})
+                continue
+
+            if user_msg.lower().startswith("/bots"):
+                statuses = orchestrator.get_all_statuses()
+                lines = [
+                    f"{v['icon']} {v['name']}: {v['status'].upper()} — {v['current_task']}"
+                    for _, v in statuses.items()
+                ]
+                await websocket.send_json({"type": "answer", "text": "\n".join(lines)})
+                continue
+
+            if user_msg.lower().startswith("/assign "):
+                parts = user_msg[8:].strip().split(" ", 1)
+                if len(parts) == 2:
+                    bot_id, task = parts
+                    try:
+                        task_id = orchestrator.assign_task(bot_id, task)
+                        reply = f"Task #{task_id} assigned to {bot_id}: {task}"
+                    except Exception as exc:
+                        reply = str(exc)
+                else:
+                    reply = "Usage: /assign <bot_id> <task description>"
+                await websocket.send_json({"type": "answer", "text": reply})
+                continue
+
+            if user_msg.lower().startswith("/debate "):
+                topic = user_msg[8:].strip()
+                await websocket.send_json({"type": "answer", "text": f"⚡ Starting debate on: {topic}..."})
+                result = await orchestrator.run_debate(topic)
+                reply = (
+                    f"DEBATE: {result['topic']}\n\n"
+                    f"🧿 SHAMAN: {result['shaman'][:200]}...\n\n"
+                    f"🟦 LIB MOM: {result['libmom'][:200]}...\n\n"
+                    f"🟥 MAGA DAD: {result['magadad'][:200]}...\n\n"
+                    f"✓ AGREED: {', '.join(result['agreements']) if result['agreements'] else 'None logged'}\n"
+                    f"✗ SPLIT: {', '.join(result['disagreements']) if result['disagreements'] else 'None logged'}\n\n"
+                    f"📋 NARRATIVE: {result['narrative']}"
+                )
                 await websocket.send_json({"type": "answer", "text": reply})
                 continue
 
@@ -423,6 +471,7 @@ async def house_websocket(websocket: WebSocket):
                         "ram": round(psutil.virtual_memory().percent),
                     },
                     "portfolio": latest_portfolio,
+                    "bot_status": orchestrator.get_all_statuses(),
                 })
                 await asyncio.sleep(3)
         except Exception:
@@ -438,6 +487,45 @@ async def house_websocket(websocket: WebSocket):
             if not user_msg:
                 continue
             await websocket.send_json({"type": "thinking", "bot": bot_id})
+
+            if bot_id == "jarvisbot" and user_msg.lower().startswith("/bots"):
+                statuses = orchestrator.get_all_statuses()
+                lines = [
+                    f"{v['icon']} {v['name']}: {v['status'].upper()} — {v['current_task']}"
+                    for _, v in statuses.items()
+                ]
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": "\n".join(lines)})
+                continue
+
+            if bot_id == "jarvisbot" and user_msg.lower().startswith("/assign "):
+                parts = user_msg[8:].strip().split(" ", 1)
+                if len(parts) == 2:
+                    target_bot, task = parts
+                    try:
+                        task_id = orchestrator.assign_task(target_bot, task)
+                        reply = f"Task #{task_id} assigned to {target_bot}: {task}"
+                    except Exception as exc:
+                        reply = str(exc)
+                else:
+                    reply = "Usage: /assign <bot_id> <task description>"
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                continue
+
+            if bot_id == "jarvisbot" and user_msg.lower().startswith("/debate "):
+                topic = user_msg[8:].strip()
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": f"⚡ Starting debate on: {topic}..."})
+                result = await orchestrator.run_debate(topic)
+                reply = (
+                    f"DEBATE: {result['topic']}\n\n"
+                    f"🧿 SHAMAN: {result['shaman'][:200]}...\n\n"
+                    f"🟦 LIB MOM: {result['libmom'][:200]}...\n\n"
+                    f"🟥 MAGA DAD: {result['magadad'][:200]}...\n\n"
+                    f"✓ AGREED: {', '.join(result['agreements']) if result['agreements'] else 'None logged'}\n"
+                    f"✗ SPLIT: {', '.join(result['disagreements']) if result['disagreements'] else 'None logged'}\n\n"
+                    f"📋 NARRATIVE: {result['narrative']}"
+                )
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                continue
 
             # News PATH (jarvisbot only) 
             from news_sources import NEWS_TRIGGERS, get_site_sources
