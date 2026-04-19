@@ -125,8 +125,12 @@ const BOTS={
   technoid:{name:'TECHNOID',role:'Mac Mini optimizer & hardware',color:'#00FF88',face:'T',label:'Tech bench'},
   teacherbot:{name:'TEACHERBOT',role:'K-12 curriculum & PE lessons',color:'#378ADD',face:'Tb',label:'Academy'},
   roundtable:{name:'ROUNDTABLE',role:'All agents · group session',color:'#7B4FFF',face:'RT',label:'Roundtable'},
+  shaman:{name:'SHAMAN',role:'Conspiracy · InfoWars · Wendigoon',color:'#9D4EDD',face:'Sh',label:'Spirit room'},
+  libmom:{name:'LIB MOM',role:'Progressive · MSNBC · CNN',color:'#4895EF',face:'Lm',label:'Blue room'},
+  magadad:{name:'MAGA DAD',role:'Patriot · Fox News · America First',color:'#EF233C',face:'Md',label:'Red room'},
+  debateroom:{name:'DEBATE ROOM',role:'All three debate · live narratives',color:'#FF6B35',face:'DB',label:'Debate arena'},
 };
-const BOT_IDS=['jarvisbot','stockbot','cryptoid','pinkslip','doctorbot','ultron','robowright','jamz','higashop','technoid','teacherbot'];
+const BOT_IDS=['jarvisbot','stockbot','cryptoid','pinkslip','doctorbot','ultron','robowright','jamz','higashop','technoid','teacherbot','shaman','libmom','magadad'];
 const LAYOUT=[
   {id:'jarvisbot',col:1,row:1,w:1,h:1},
   {id:'roundtable',col:2,row:1,w:2,h:2},
@@ -140,9 +144,13 @@ const LAYOUT=[
   {id:'pinkslip',col:1,row:4,w:1,h:1},
   {id:'doctorbot',col:2,row:4,w:1,h:1},
   {id:'teacherbot',col:3,row:4,w:2,h:1},
+  {id:'shaman',col:1,row:5,w:1,h:1},
+  {id:'debateroom',col:2,row:5,w:2,h:2},
+  {id:'libmom',col:4,row:5,w:1,h:1},
+  {id:'magadad',col:1,row:6,w:1,h:1},
 ];
 const grid=document.getElementById('hgrid');
-grid.style.gridTemplateRows='repeat(4,1fr)';
+grid.style.gridTemplateRows='repeat(6,1fr)';
 LAYOUT.forEach(r=>{
   const bot=BOTS[r.id];
   const div=document.createElement('div');
@@ -342,6 +350,68 @@ function connect(){
   ws.onerror=()=>ws.close();
 }
 connect();
+
+// ── BOT STATUS ROOM COLORS ─────────────────────────────────────────────────
+const STATUS_COLORS = {
+  idle:         '#0044AA',   // blue
+  working:      '#AA8800',   // yellow
+  review_ready: '#006600',   // green
+  blocked:      '#AA0000',   // red
+};
+const STATUS_GLOW = {
+  idle:         '0 0 10px rgba(0,100,255,0.4)',
+  working:      '0 0 10px rgba(255,200,0,0.4)',
+  review_ready: '0 0 10px rgba(0,255,100,0.4)',
+  blocked:      '0 0 14px rgba(255,0,0,0.6)',
+};
+const STATUS_DOT = {
+  idle:         '#0088FF',
+  working:      '#FFD700',
+  review_ready: '#00FF88',
+  blocked:      '#FF3355',
+};
+
+function applyBotStatuses(statuses) {
+  Object.entries(statuses).forEach(([botId, data]) => {
+    const room = document.getElementById('room-' + botId);
+    if (!room) return;
+    const status = data.status || 'idle';
+    const color  = STATUS_COLORS[status]  || STATUS_COLORS.idle;
+    const glow   = STATUS_GLOW[status]    || STATUS_GLOW.idle;
+    room.style.borderColor = color;
+    room.style.boxShadow   = glow;
+
+    // Add/update status dot indicator
+    let dot = room.querySelector('.status-dot');
+    if (!dot) {
+      dot = document.createElement('div');
+      dot.className = 'status-dot';
+      dot.style.cssText = 'position:absolute;bottom:5px;right:5px;width:6px;height:6px;border-radius:50%;z-index:10;';
+      room.appendChild(dot);
+    }
+    dot.style.background  = STATUS_DOT[status] || STATUS_DOT.idle;
+    dot.style.boxShadow   = `0 0 5px ${STATUS_DOT[status] || STATUS_DOT.idle}`;
+    dot.title = `${data.status} — ${data.current_task}`;
+  });
+}
+
+async function pollBotStatuses() {
+  try {
+    const r = await fetch('/api/bots/status');
+    if (r.ok) {
+      const statuses = await r.json();
+      applyBotStatuses(statuses);
+    }
+  } catch(e) {
+    console.warn('Bot status poll failed:', e);
+  }
+}
+
+// Poll immediately then every 3 seconds
+pollBotStatuses();
+setInterval(pollBotStatuses, 3000);
+// ──────────────────────────────────────────────────────────────────────────
+
 </script>
 </body>
 </html>
