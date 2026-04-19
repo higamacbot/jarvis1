@@ -427,6 +427,18 @@ async def house_websocket(websocket: WebSocket):
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
                 continue
 
+            # YouTube PATH (jarvisbot only)
+            yt_result, yt_mode = await asyncio.to_thread(handle_youtube_request, user_msg)
+            if yt_result and yt_mode == "youtube_summarize":
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": "Fetching and analyzing video..."})
+                reply = await ask_ollama(user_msg, extra_context=yt_result)
+                memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                continue
+            elif yt_result:
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": yt_result})
+                continue
+
             reply = await route_message(bot_id, user_msg, ask_ollama)
             memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
             await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
