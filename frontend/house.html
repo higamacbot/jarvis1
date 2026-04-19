@@ -265,27 +265,25 @@ function selectBot(id){
   document.getElementById('minput').placeholder=`COMMAND FOR ${bot.name}...`;
   addMsg('sys',`[ ${bot.name} ENGAGED ]`,id);
 
-  // Animate debate bots into arena when debate room clicked
+  // Animate debate bots into their own room centers when debate clicked
   if(id==='debateroom'){
-    const arenaEl=document.getElementById('room-debateroom');
-    if(arenaEl){
-      const arenaRect=arenaEl.getBoundingClientRect();
-      const gridRect=document.getElementById('hgrid').getBoundingClientRect();
-      const destX=arenaRect.left - gridRect.left + arenaRect.width/2;
-      const destY=arenaRect.top  - gridRect.top  + arenaRect.height/2;
-      ['shaman','libmom','magadad'].forEach((bid,i)=>{
-        const b=BA[bid];
-        if(b){ b.tx=destX - (arenaRect.left-gridRect.left); b.ty=destY - (arenaRect.top-gridRect.top); b.wt=9999; }
-        // Flash their rooms yellow while waiting
-        const rm=document.getElementById('room-'+bid);
-        if(rm){ rm.style.borderColor='#AA8800'; rm.style.boxShadow='0 0 10px rgba(255,200,0,0.6)'; }
-      });
-    }
+    ['shaman','libmom','magadad'].forEach((bid)=>{
+      const b=BA[bid];
+      const cv=document.getElementById('cv-'+bid);
+      if(b&&cv){
+        // Move to center of their own canvas
+        b.tx=cv.width/2; b.ty=cv.height/2; b.wt=9999;
+      }
+      const rm=document.getElementById('room-'+bid);
+      if(rm){rm.style.borderColor='#AA8800';rm.style.boxShadow='0 0 14px rgba(255,200,0,0.7)';}
+    });
+    // Light up arena
+    const arena=document.getElementById('room-debateroom');
+    if(arena){arena.style.borderColor='#FF6B35';arena.style.boxShadow='0 0 20px rgba(255,107,53,0.6)';}
   } else {
-    // If leaving debate room, let bots wander back
-    if(['shaman','libmom','magadad'].includes(id)===false){
+    if(!['shaman','libmom','magadad'].includes(id)){
       ['shaman','libmom','magadad'].forEach(bid=>{
-        const b=BA[bid]; if(b){ b.wt=0; }
+        const b=BA[bid];if(b){b.wt=0;}
       });
     }
   }
@@ -294,6 +292,36 @@ setTimeout(()=>selectBot('jarvisbot'),200);
 
 const msgsEl=document.getElementById('msgs');
 const inp=document.getElementById('minput');
+
+function colorDebateMsg(text){
+  // Color-code debate room responses
+  const lines = text.split('\n');
+  const msgsEl = document.getElementById('msgs');
+  lines.forEach(line => {
+    if(!line.trim()) return;
+    const d = document.createElement('div');
+    d.className = 'mb bot';
+    d.style.marginBottom = '4px';
+    if(line.startsWith('[DEBATE]')){
+      d.style.color='#FF6B35'; d.style.borderLeftColor='#FF6B35';
+      d.style.fontWeight='bold'; d.textContent = line.replace('[DEBATE]','🔥 TOPIC:');
+    } else if(line.startsWith('[SHAMAN]')){
+      d.style.color='#FF69B4'; d.style.borderLeftColor='#FF69B4';
+      d.textContent = line.replace('[SHAMAN]','🧿 SHAMAN:');
+    } else if(line.startsWith('[LIB MOM]')){
+      d.style.color='#4895EF'; d.style.borderLeftColor='#4895EF';
+      d.textContent = line.replace('[LIB MOM]','🟦 LIB MOM:');
+    } else if(line.startsWith('[MAGA DAD]')){
+      d.style.color='#EF233C'; d.style.borderLeftColor='#EF233C';
+      d.textContent = line.replace('[MAGA DAD]','🟥 MAGA DAD:');
+    } else {
+      d.style.color='var(--text)'; d.style.borderLeftColor='var(--cyan)';
+      d.textContent = line;
+    }
+    msgsEl.appendChild(d);
+  });
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
 
 function addMsg(role,text,botId){
   const bot=BOTS[botId||curBot];
@@ -376,9 +404,15 @@ function connect(){
       return;
     }
     if(data.type==='answer'){
-      hideThink();addMsg('bot',data.text,data.bot||curBot);
-      // Restore room color after response (status polling will take over in 3s)
-      const doneRoom=document.getElementById('room-'+(data.bot||curBot));
+      hideThink();
+      const ansBot = data.bot||curBot;
+      if(ansBot==='debateroom' && data.text.includes('[SHAMAN]')){
+        colorDebateMsg(data.text);
+      } else {
+        addMsg('bot',data.text,ansBot);
+      }
+      // Restore room color after response
+      const doneRoom=document.getElementById('room-'+ansBot);
       if(doneRoom){doneRoom.style.borderColor=doneRoom.dataset.prevBorder||'';doneRoom.style.boxShadow='';}
     }
   };
