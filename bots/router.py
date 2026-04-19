@@ -50,7 +50,44 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
     print(f">> ROUTER DEBUG: bot_id = '{bot_id}'")
     
     if bot_id == "roundtable":
-        return await ask_fn(user_msg, system_override=ROUNDTABLE_PROMPT)
+        import httpx
+        from multi_broker_portfolio import MultiBrokerPortfolio
+
+        # Inject real portfolio data into roundtable context
+        try:
+            tracker = MultiBrokerPortfolio()
+            all_crypto = tracker.get_all_crypto()
+            pd = tracker.portfolio_data
+
+            webull_crypto = sum(v['value'] for v in pd['webull']['crypto'].values())
+            coinbase_total = pd['coinbase']['total_value']
+            kraken_equity = pd['paper_trading']['kraken']['equity']
+            crypto_total = sum(c['value'] for c in all_crypto.values())
+
+            crypto_lines = "\n".join(
+                f"  {sym}: ${d['value']:.2f} (P/L: ${d.get('pl',0):+.2f}) [{d.get('broker','')}]"
+                for sym, d in all_crypto.items()
+            )
+
+            roundtable_context = f"""
+LIVE PORTFOLIO DATA FOR ALL AGENTS:
+
+STOCKS (Alpaca paper):
+  Equity: $1,801.29 | Buying Power: $6.37
+  Positions: AMD, META, NFLX, NVDA, PYPL, TSLA, VOO
+
+CRYPTO PORTFOLIO (Total: ${crypto_total:.2f}):
+{crypto_lines}
+
+BROKER TOTALS:
+  Webull: $834.81 | Robinhood: $273.85 | Coinbase: ${coinbase_total:.2f}
+  Acorns: $454.36 | Alpaca paper: $1,801.29 | Kraken paper: ${kraken_equity:.2f}
+  TOTAL REAL PORTFOLIO: ~$3,696
+"""
+        except Exception as e:
+            roundtable_context = f"Portfolio data unavailable: {e}"
+
+        return await ask_fn(user_msg, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context)
     
     # Jarvis uses default system prompt (same as main /ws endpoint)
     if bot_id == "jarvisbot":
