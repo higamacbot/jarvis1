@@ -143,3 +143,5 @@
 - Roundtable has real portfolio data injected (crypto $466, stocks, all brokers)
 - Cryptoid shows real P/L numbers in roundtable (BTC +$56.46, ETH -$25.69 etc)
 - Do NOT change roundtable prompt without reading this note first
+
+### Apr 19, 2026 @ 07:20 AM — MILESTONE: Roundtable fully dialed in. All 11 agents responding with appropriate length updates. Cryptoid showing real P/L numbers. Teacherbot correctly isolated from financial data.
