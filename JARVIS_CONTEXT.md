@@ -185,3 +185,5 @@
 ### Apr 19, 2026 @ 08:47 PM — CRITICAL FIX: Resolved Roundtable Neural Link Error by hardening portfolio data summation. DEPLOYED: Debate Room chairs and physical animation. DEPLOYED: Status color cycle Yellow->Green->Blue. REPO CLEANUP: Removed blocked news_scraper.py and market_scraper.py.
 
 ### Apr 19, 2026 @ 11:09 PM — FIXED: router.py crypto_lines syntax error. JARVIS fully operational. Debate room colored responses working. Room colors yellow->green->blue cycle live.
+
+### Apr 19, 2026 @ 11:15 PM — Fixed roundtable Neural Link Error — was timing out at 90s generating 11 agent responses. Increased to 240s.
