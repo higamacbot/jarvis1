@@ -83,10 +83,8 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
                 if isinstance(v, dict): crypto_total += v.get('value', 0)
                 elif isinstance(v, (int, float)): crypto_total += v
 
-            crypto_lines = "
-".join([f"  {s}: ${d.get('value',0):.2f}" for s, d in all_crypto.items() if isinstance(d, dict)])
-            roundtable_context = f"REAL PORTFOLIO: Total Crypto ${crypto_total:.2f}
-{crypto_lines}"
+            crypto_lines = "\n".join([f"  {s}: ${d.get('value',0):.2f}" for s, d in all_crypto.items() if isinstance(d, dict)])
+            roundtable_context = f"REAL PORTFOLIO: Total Crypto ${crypto_total:.2f}\n{crypto_lines}"
         except Exception as e:
             roundtable_context = f"Portfolio System Link Error: {e}"
         return await ask_fn(user_msg, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context)

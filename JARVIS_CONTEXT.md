@@ -181,3 +181,5 @@
 ### Apr 19, 2026 @ 06:49 PM — Debate arena: 3 bots drawn at chairs around debate table inside arena canvas. Own rooms show IN ARENA when debate active.
 
 ### Apr 19, 2026 @ 06:50 PM — Room status colors: yellow while thinking, green flash on response ready, blue after 2s idle
+
+### Apr 19, 2026 @ 08:47 PM — CRITICAL FIX: Resolved Roundtable Neural Link Error by hardening portfolio data summation. DEPLOYED: Debate Room chairs and physical animation. DEPLOYED: Status color cycle Yellow->Green->Blue. REPO CLEANUP: Removed blocked news_scraper.py and market_scraper.py.
