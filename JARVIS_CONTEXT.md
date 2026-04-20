@@ -189,3 +189,5 @@
 ### Apr 19, 2026 @ 11:15 PM — Fixed roundtable Neural Link Error — was timing out at 90s generating 11 agent responses. Increased to 240s.
 
 ### Apr 19, 2026 @ 11:20 PM — Fixed Neural Link Error on roundtable — httpx timeout was hardcoded 120s, now uses dynamic timeout param (240s for roundtable)
+
+### Apr 19, 2026 @ 11:24 PM — MILESTONE: Roundtable fully restored. All 11 agents responding. Timeout fixed (hardcoded 120s -> dynamic 240s). Debate room working with colored responses. Room colors yellow->green->blue cycle live.
