@@ -472,13 +472,11 @@ function connect(){
       const ansBot = data.bot||curBot;
       const room = document.getElementById('room-'+ansBot);
       if(room){
-        room.style.borderColor='#00FF88'; room.style.boxShadow='0 0 25px rgba(0,255,136,0.7)'; // GREEN FLASH
+        room.style.borderColor='#00FF88'; room.style.boxShadow='0 0 25px rgba(0,255,136,0.7)';
         setTimeout(() => { 
-          room.style.borderColor='#0044AA'; room.style.boxShadow='none'; // BACK TO BLUE
+          room.style.borderColor='#0044AA'; room.style.boxShadow='none';
         }, 3000);
       }
-      hideThink();
-      const ansBot = data.bot||curBot;
       if(ansBot==='debateroom' && data.text.includes('[SHAMAN]')){
         colorDebateMsg(data.text);
       } else {
