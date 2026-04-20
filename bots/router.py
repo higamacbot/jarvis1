@@ -75,37 +75,20 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
         # Inject real portfolio data into roundtable context
         try:
             tracker = MultiBrokerPortfolio()
-            all_crypto = tracker.get_all_crypto()
-            pd = tracker.portfolio_data
+            all_crypto = tracker.get_all_crypto() or {}
+            
+            # Context-Safe Summing (Handles Dicts vs Floats correctly)
+            crypto_total = 0
+            for v in all_crypto.values():
+                if isinstance(v, dict): crypto_total += v.get('value', 0)
+                elif isinstance(v, (int, float)): crypto_total += v
 
-            webull_crypto = sum(v['value'] for v in pd['webull']['crypto'].values())
-            coinbase_total = pd['coinbase']['total_value']
-            kraken_equity = pd['paper_trading']['kraken']['equity']
-            crypto_total = sum(c['value'] for c in all_crypto.values())
-
-            crypto_lines = "\n".join(
-                f"  {sym}: ${d['value']:.2f} (P/L: ${d.get('pl',0):+.2f}) [{d.get('broker','')}]"
-                for sym, d in all_crypto.items()
-            )
-
-            roundtable_context = f"""
-LIVE PORTFOLIO DATA FOR ALL AGENTS:
-
-STOCKS (Alpaca paper):
-  Equity: $1,801.29 | Buying Power: $6.37
-  Positions: AMD, META, NFLX, NVDA, PYPL, TSLA, VOO
-
-CRYPTO PORTFOLIO (Total: ${crypto_total:.2f}):
-{crypto_lines}
-
-BROKER TOTALS:
-  Webull: $834.81 | Robinhood: $273.85 | Coinbase: ${coinbase_total:.2f}
-  Acorns: $454.36 | Alpaca paper: $1,801.29 | Kraken paper: ${kraken_equity:.2f}
-  TOTAL REAL PORTFOLIO: ~$3,696
-"""
+            crypto_lines = "
+".join([f"  {s}: ${d.get('value',0):.2f}" for s, d in all_crypto.items() if isinstance(d, dict)])
+            roundtable_context = f"REAL PORTFOLIO: Total Crypto ${crypto_total:.2f}
+{crypto_lines}"
         except Exception as e:
-            roundtable_context = f"Portfolio data unavailable: {e}"
-
+            roundtable_context = f"Portfolio System Link Error: {e}"
         return await ask_fn(user_msg, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context)
     
     # Jarvis uses default system prompt (same as main /ws endpoint)
