@@ -233,7 +233,7 @@ async def fetch_alpaca():
 # OLLAMA LOGIC
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def ask_ollama(user_msg: str, extra_context: str = "", timeout: float = 90.0, system_override: str = None) -> str:
+async def ask_ollama(user_msg: str, extra_context: str = "", timeout: float = 240.0, system_override: str = None) -> str:
     market_str = ", ".join([f"{k}: ${v['price']}" for k, v in latest_market_data.items()]) or "No market data."
     metrics = get_system_metrics()
     system_stats = f"CPU: {metrics['cpu_total']}% | RAM: {metrics['ram_used_gb']}GB | Uptime: {metrics['uptime']}"

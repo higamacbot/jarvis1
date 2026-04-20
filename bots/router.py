@@ -87,7 +87,7 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
             roundtable_context = f"REAL PORTFOLIO: Total Crypto ${crypto_total:.2f}\n{crypto_lines}"
         except Exception as e:
             roundtable_context = f"Portfolio System Link Error: {e}"
-        return await ask_fn(user_msg, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context)
+        return await ask_fn(user_msg, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context, timeout=240.0)
     
     # Jarvis uses default system prompt (same as main /ws endpoint)
     if bot_id == "jarvisbot":
