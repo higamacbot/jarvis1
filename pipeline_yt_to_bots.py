@@ -69,7 +69,22 @@ async def run_youtube_pipeline(query: str = None):
         orchestrator.update_status("jarvisbot", "yellow", f"YT Pipeline: {q}")
 
         try:
-            result, mode = handle_youtube_request(f"summarize {q}")
+            # Step 1: search for videos
+            search_result, _ = handle_youtube_request(f"find me videos about {q}")
+            if not search_result:
+                continue
+
+            # Step 2: extract first URL from results
+            import re as _re
+            urls = _re.findall(r'https://www\.youtube\.com/watch\?v=[\w-]+', search_result)
+            if not urls:
+                print(f">> PIPELINE: No URLs found for '{q}'")
+                continue
+
+            # Step 3: get transcript of first video
+            top_url = urls[0]
+            print(f">> PIPELINE: Fetching transcript for {top_url}")
+            result, mode = handle_youtube_request(f"summarize this: {top_url}")
             if not result:
                 continue
 
