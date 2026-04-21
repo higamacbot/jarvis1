@@ -191,3 +191,5 @@
 ### Apr 19, 2026 @ 11:20 PM — Fixed Neural Link Error on roundtable — httpx timeout was hardcoded 120s, now uses dynamic timeout param (240s for roundtable)
 
 ### Apr 19, 2026 @ 11:24 PM — MILESTONE: Roundtable fully restored. All 11 agents responding. Timeout fixed (hardcoded 120s -> dynamic 240s). Debate room working with colored responses. Room colors yellow->green->blue cycle live.
+
+### Apr 20, 2026 @ 07:33 PM — Doctorbot code intelligence added: find bugs, scan imports, review [file], brainstorm [topic]. OpenClaw placeholder ready for API key. Brainstorm saves to brainstorm/ folder.
