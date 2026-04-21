@@ -195,3 +195,5 @@
 ### Apr 20, 2026 @ 07:33 PM — Doctorbot code intelligence added: find bugs, scan imports, review [file], brainstorm [topic]. OpenClaw placeholder ready for API key. Brainstorm saves to brainstorm/ folder.
 
 ### Apr 20, 2026 @ 07:41 PM — MILESTONE: Doctorbot code intelligence fully operational. find bugs (48 files clean), review main.py (3 suggestions), brainstorm pinkslip (7 ideas saved to brainstorm/). OpenClaw placeholder ready.
+
+### Apr 20, 2026 @ 07:43 PM — Memory upgraded: ChromaDB semantic search added alongside SQLite. semantic_search() available for future use in ask_ollama.
