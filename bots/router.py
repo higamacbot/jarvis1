@@ -222,4 +222,25 @@ Broker Breakdown:
             error_context = f"CRYPTO PORTFOLIO ERROR: {e}"
             return await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT, extra_context=error_context)
     
+    # Doctorbot — code intelligence commands
+    if bot_id == "doctorbot":
+        q = user_msg.lower().strip()
+        if q == "find bugs" or q == "scan":
+            from bots.doctorbot import scan_for_bugs
+            return scan_for_bugs()
+        elif q == "scan imports":
+            from bots.doctorbot import scan_imports
+            return scan_imports()
+        elif q.startswith("review "):
+            filename = user_msg[7:].strip()
+            from bots.doctorbot import review_file
+            return await review_file(filename)
+        elif q.startswith("brainstorm "):
+            topic = user_msg[11:].strip()
+            from bots.doctorbot import brainstorm
+            return await brainstorm(topic)
+        elif q == "repo health":
+            from bots.doctorbot import repo_health
+            return repo_health()
+
     return await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT)
