@@ -197,3 +197,5 @@
 ### Apr 20, 2026 @ 07:41 PM — MILESTONE: Doctorbot code intelligence fully operational. find bugs (48 files clean), review main.py (3 suggestions), brainstorm pinkslip (7 ideas saved to brainstorm/). OpenClaw placeholder ready.
 
 ### Apr 20, 2026 @ 07:43 PM — Memory upgraded: ChromaDB semantic search added alongside SQLite. semantic_search() available for future use in ask_ollama.
+
+### Apr 20, 2026 @ 07:45 PM — PDF bot deployed: auto-generates debate PDFs, /pdf command in HIGA HOUSE, create_youtube_pdf and create_market_pdf available
