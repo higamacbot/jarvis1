@@ -23,6 +23,7 @@ from bot_orchestrator import orchestrator, register_routes, init_orchestrator_db
 from youtube_tools import handle_youtube_request
 from trading import is_trade_command, parse_trade_intent, execute_trade_intent, get_trade_history
 from bots.router import route_message
+from pipeline_yt_to_bots import run_pipeline_scheduler, run_youtube_pipeline
 from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, analyze_ticker, analyze_portfolio
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -278,6 +279,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(fetch_crypto()),
         asyncio.create_task(fetch_alpaca()),
         asyncio.create_task(orchestrator.background_worker()),
+        asyncio.create_task(run_pipeline_scheduler()),
     ]
     yield
     for t in tasks:
@@ -574,6 +576,14 @@ Do not mention any inability to access external content."""
             elif yt_result:
                 print(">> YOUTUBE DEBUG: Direct YouTube response")
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": yt_result})
+                continue
+
+            # Pipeline command
+            if user_msg.lower().startswith("/pipeline"):
+                query = user_msg[9:].strip() or None
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": "⚡ Running YouTube pipeline..."})
+                await run_youtube_pipeline(query)
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": "✅ Pipeline complete. Check stockbot and cryptoid rooms."})
                 continue
 
             # PDF command
