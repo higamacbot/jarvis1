@@ -576,6 +576,19 @@ Do not mention any inability to access external content."""
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": yt_result})
                 continue
 
+            # PDF command
+            if user_msg.lower().startswith("/pdf"):
+                from pdf_bot import create_pdf_fpdf, list_pdfs
+                body = user_msg[4:].strip()
+                if body:
+                    path = create_pdf_fpdf("JARVIS Report", body)
+                    reply = f"PDF created: {path}"
+                else:
+                    files = list_pdfs()
+                    reply = "PDFs:\n" + "\n".join(files) if files else "No PDFs yet."
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                continue
+
             reply = await route_message(bot_id, user_msg, ask_ollama)
             memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
             await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
