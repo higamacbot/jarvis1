@@ -199,3 +199,5 @@
 ### Apr 20, 2026 @ 07:43 PM — Memory upgraded: ChromaDB semantic search added alongside SQLite. semantic_search() available for future use in ask_ollama.
 
 ### Apr 20, 2026 @ 07:45 PM — PDF bot deployed: auto-generates debate PDFs, /pdf command in HIGA HOUSE, create_youtube_pdf and create_market_pdf available
+
+### Apr 21, 2026 @ 05:30 PM — Pipeline deployed: YouTube scrapes every 6hrs, routes stocks to stockbot, crypto to cryptoid, geopolitics to shaman. /pipeline command for manual trigger. PDF bot auto-generates on debates.
