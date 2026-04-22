@@ -22,16 +22,35 @@ CRYPTO_COINS = [
 ]
 
 AUTO_SCRAPE_QUERIES = [
-    "stock market analysis today",
-    "bitcoin crypto news today",
-    "best stocks to buy this week",
-    "crypto market update",
+    "stock market analysis today english",
+    "bitcoin crypto news today english",
+    "best stocks to buy this week wallstreet",
+    "crypto market update english 2026",
 ]
+
+# Company name -> ticker mapping for full-name detection
+NAME_TO_TICKER = {
+    "nvidia": "NVDA", "apple": "AAPL", "tesla": "TSLA", "microsoft": "MSFT",
+    "amazon": "AMZN", "google": "GOOGL", "alphabet": "GOOGL", "meta": "META",
+    "netflix": "NFLX", "paypal": "PYPL", "amd": "AMD", "intel": "INTC",
+    "boeing": "BA", "disney": "DIS", "uber": "UBER", "visa": "V",
+    "bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL", "dogecoin": "DOGE",
+    "ripple": "XRP", "cardano": "ADA", "binance": "BNB", "shiba": "SHIB",
+    "chainlink": "LINK", "polkadot": "DOT", "avalanche": "AVAX",
+}
 
 def extract_tickers(text: str) -> dict:
     text_upper = text.upper()
+    text_lower = text.lower()
     found_stocks = [t for t in STOCK_TICKERS if re.search(rf'\b{t}\b', text_upper)]
     found_crypto = [c for c in CRYPTO_COINS if re.search(rf'\b{c}\b', text_upper)]
+    # Also check company names
+    for name, ticker in NAME_TO_TICKER.items():
+        if name in text_lower:
+            if ticker in STOCK_TICKERS and ticker not in found_stocks:
+                found_stocks.append(ticker)
+            if ticker in CRYPTO_COINS and ticker not in found_crypto:
+                found_crypto.append(ticker)
     return {"stocks": list(set(found_stocks)), "crypto": list(set(found_crypto))}
 
 async def summarize_for_bot(transcript: str, bot_type: str, tickers: list) -> str:
