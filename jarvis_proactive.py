@@ -3,7 +3,7 @@ from telegram.ext import Application
 from alpaca.trading.client import TradingClient
 
 # Config
-TOKEN = "8698860518:AAEEDckZXlW68yJ4kfxSMix1Vb5x6drB-gI"
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 ALPACA_KEY = os.getenv("ALPACA_KEY")
 ALPACA_SECRET = os.getenv("ALPACA_SECRET")
 

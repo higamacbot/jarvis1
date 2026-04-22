@@ -6,8 +6,8 @@ from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 
 # Setup
-ALPACA_KEY = os.getenv("ALPACA_KEY", "PKJAUIEC7IAEZ6Y4KLHVGGK2SK")
-ALPACA_SECRET = os.getenv("ALPACA_SECRET", "7xirUrAWACJp7dL8EdHzNWMjEXWggge3EQMoTaZY9ZZy")
+ALPACA_KEY = os.getenv("ALPACA_KEY")
+ALPACA_SECRET = os.getenv("ALPACA_SECRET")
 client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 
 TICKERS = ["META", "AAPL", "NFLX", "AMD", "NVDA", "TSLA"]
