@@ -66,22 +66,45 @@ def get_system_stats():
     disk = psutil.disk_usage('/')
     return cpu, ram.used / (1024**3), ram.total / (1024**3), disk.percent
 
+async def fetch_headlines(n=5) -> str:
+    """Scrape real headlines from AP and BBC."""
+    try:
+        import sys
+        sys.path.insert(0, "/Users/higabot1/jarvis1-1")
+        from fetch import fetch_source_context
+        from news_sources import get_site_sources
+        sources = get_site_sources()[:2]  # AP + BBC
+        headlines = []
+        for src in sources:
+            try:
+                url, text = await asyncio.to_thread(fetch_source_context, src["url"])
+                # Extract first few lines as headlines
+                lines = [l.strip() for l in text.split("\n") if len(l.strip()) > 30][:3]
+                for line in lines:
+                    headlines.append(f"{src['name']}: {line[:100]}")
+            except Exception:
+                pass
+        return "\n".join([f"{i+1}. {h}" for i, h in enumerate(headlines[:n])])
+    except Exception as e:
+        return f"Headlines unavailable: {e}"
+
 async def generate_briefing(time_of_day):
     now = datetime.now().strftime('%B %d, %Y — %I:%M %p CST')
     is_morning = time_of_day == "morning"
     market_note = "Markets open 9:30 AM ET. Standing by, sir." if is_morning else "Markets closed. Review complete. Standing by, sir."
     icon = "🌅" if is_morning else "🌆"
 
-    # Fetch all data
-    prices      = await get_crypto_prices()
-    portfolio   = await get_alpaca_portfolio()
+    # Fetch all data in parallel where possible
+    prices    = await get_crypto_prices()
+    portfolio = await get_alpaca_portfolio()
     cpu, ram_used, ram_total, disk = get_system_stats()
     crypto_total, crypto_lines, wb_crypto, cb_total, kr_equity = get_real_crypto()
+    headlines = await fetch_headlines(5)
 
     # Build position strings
     pos_lines = ""
     for p in portfolio.get("positions", []):
-        emoji = "🟢" if p['pl'] >= 0 else "🔴"
+        emoji = "🟢" if p["pl"] >= 0 else "🔴"
         pos_lines += f"{emoji} {p['symbol']}: ${p['value']:,.2f} (P/L: ${p['pl']:+,.2f})\n"
 
     price_str = ", ".join([f"{k}: ${v:,.2f}" for k, v in prices.items()]) if prices else "Unavailable"
@@ -93,8 +116,9 @@ Use ONLY the real data provided below. No invented numbers.
 STOCKS (Alpaca paper):
   Equity: ${portfolio.get('equity', 0):,.2f} | Day P/L: {portfolio.get('day_pl', 0):+,.2f} | Buying Power: ${portfolio.get('buying_power', 0):,.2f}
 {pos_lines}
-CRYPTO PORTFOLIO (Total: ${crypto_total:.2f}):
+REAL CRYPTO PORTFOLIO (Total: ${crypto_total:.2f}):
 {crypto_lines}
+  Webull: ${wb_crypto:.2f} | Coinbase: ${cb_total:.2f} | Kraken paper: ${kr_equity:.2f}
   Webull crypto: ${wb_crypto:.2f} | Coinbase: ${cb_total:.2f} | Kraken paper: ${kr_equity:.2f}
 
 LIVE PRICES: {price_str}
@@ -112,7 +136,8 @@ Format the briefing EXACTLY like this — each section is its own agent voice:
 
 🪙 CRYPTOID: [1-3 sentences. Real crypto P/L numbers. Which to hold, which to reduce. Total portfolio value.]
 
-📰 HEADLINES: [Leave blank — will be filled separately]
+📰 HEADLINES:
+{headlines}
 
 🔒 ULTRON: [1 sentence security status]
 
