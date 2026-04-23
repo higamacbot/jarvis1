@@ -134,7 +134,7 @@ Format the briefing EXACTLY like this — each section is its own agent voice:
 
 📈 STOCKBOT: [1-3 sentences. Which stocks are up/down, any sell signals, buying power status.]
 
-🪙 CRYPTOID: [1-3 sentences. Real crypto P/L numbers. Which to hold, which to reduce. Total portfolio value.]
+🪙 CRYPTOID: [Use the REAL CRYPTO PORTFOLIO data above. State total value, which coins are up/down with actual P/L numbers, and give a 1-sentence hold/reduce recommendation. Do NOT say unavailable.]
 
 📰 HEADLINES:
 {headlines}
