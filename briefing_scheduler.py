@@ -119,13 +119,12 @@ STOCKS (Alpaca paper):
 REAL CRYPTO PORTFOLIO (Total: ${crypto_total:.2f}):
 {crypto_lines}
   Webull: ${wb_crypto:.2f} | Coinbase: ${cb_total:.2f} | Kraken paper: ${kr_equity:.2f}
-  Webull crypto: ${wb_crypto:.2f} | Coinbase: ${cb_total:.2f} | Kraken paper: ${kr_equity:.2f}
 
 LIVE PRICES: {price_str}
 SYSTEM: CPU {cpu:.0f}% | RAM {ram_used:.1f}GB/{ram_total:.1f}GB | Disk {disk:.0f}%
 ---
 
-Format the briefing EXACTLY like this — each section is its own agent voice:
+Format the briefing EXACTLY like this. Use the real data above. No placeholders:
 
 {icon} J.A.R.V.I.S. {time_of_day.upper()} BRIEFING
 {now}

@@ -24,6 +24,7 @@ from youtube_tools import handle_youtube_request
 from trading import is_trade_command, parse_trade_intent, execute_trade_intent, get_trade_history
 from bots.router import route_message
 from pipeline_yt_to_bots import run_pipeline_scheduler, run_youtube_pipeline
+from autonomous_runner import runner, queue_youtube_playlist, queue_channel
 from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, analyze_ticker, analyze_portfolio
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -280,6 +281,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(fetch_alpaca()),
         asyncio.create_task(orchestrator.background_worker()),
         asyncio.create_task(run_pipeline_scheduler()),
+        asyncio.create_task(runner.run()),
     ]
     yield
     for t in tasks:
@@ -576,6 +578,49 @@ Do not mention any inability to access external content."""
             elif yt_result:
                 print(">> YOUTUBE DEBUG: Direct YouTube response")
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": yt_result})
+                continue
+
+            # Queue command
+            if user_msg.lower().startswith("/queue "):
+                body = user_msg[7:].strip()
+                if "youtube.com" in body or "youtu.be" in body:
+                    reply = queue_youtube_playlist(body)
+                elif body.startswith("channel "):
+                    reply = queue_channel(body[8:].strip())
+                else:
+                    reply = "Usage: /queue [YouTube URLs] or /queue channel [name]"
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                continue
+
+            # Review command
+            if user_msg.lower() == "/review":
+                jobs = runner.manager.get_review_queue()
+                if not jobs:
+                    reply = "✅ Nothing to review — all caught up, sir."
+                else:
+                    lines = [f"📋 {len(jobs)} items ready:\n"]
+                    for j in jobs[:8]:
+                        icon = "✅" if j["status"]=="done" else "❌"
+                        label = j["payload"].get("url","") or j["payload"].get("topic","") or j["job_type"]
+                        lines.append(f"{icon} #{j['id']} {j['job_type']}: {str(label)[:50]}")
+                        if j.get("output_file"): lines.append(f"   📄 {os.path.basename(j['output_file'])}")
+                        if j.get("error"): lines.append(f"   ⚠️ {j['error'][:60]}")
+                    reply = "\n".join(lines)
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                continue
+
+            # Batches command
+            if user_msg.lower() == "/batches":
+                batches = runner.manager.get_all_batches()
+                if not batches:
+                    reply = "No batches yet."
+                else:
+                    lines = ["📦 BATCHES:"]
+                    for b in batches[:8]:
+                        icon = "✅" if b["status"]=="done" else "⏳"
+                        lines.append(f"{icon} {b['name']} — {b['done']}/{b['total']}")
+                    reply = "\n".join(lines)
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
                 continue
 
             # Pipeline command
