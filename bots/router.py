@@ -84,7 +84,19 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
                 elif isinstance(v, (int, float)): crypto_total += v
 
             crypto_lines = "\n".join([f"  {s}: ${d.get('value',0):.2f}" for s, d in all_crypto.items() if isinstance(d, dict)])
-            roundtable_context = f"REAL PORTFOLIO: Total Crypto ${crypto_total:.2f}\n{crypto_lines}"
+            # Also fetch Alpaca stock positions
+            try:
+                import os
+                from alpaca.trading.client import TradingClient
+                ac = TradingClient(os.getenv("ALPACA_KEY"), os.getenv("ALPACA_SECRET"), paper=True)
+                acct = ac.get_account()
+                pos = ac.get_all_positions()
+                stock_lines = "\n".join([f"  {p.symbol}: ${float(p.market_value):,.2f} (P/L: {float(p.unrealized_pl):+,.2f})" for p in pos])
+                stock_context = f"STOCKS (Alpaca paper):\n  Equity: ${float(acct.equity):,.2f} | Buying Power: ${float(acct.buying_power):,.2f}\n{stock_lines}"
+            except Exception as e:
+                stock_context = f"STOCKS: unavailable ({e})"
+
+            roundtable_context = f"{stock_context}\n\nREAL CRYPTO: Total ${crypto_total:.2f}\n{crypto_lines}"
         except Exception as e:
             roundtable_context = f"Portfolio System Link Error: {e}"
         return await ask_fn(user_msg, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context, timeout=240.0)
