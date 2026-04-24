@@ -205,3 +205,5 @@
 ### Apr 22, 2026 @ 06:56 AM — SECURITY: Removed hardcoded Alpaca keys from jarvis_autopilot.py and Telegram token from jarvis_proactive.py. Both now use os.getenv() only. Keys rotated on alpaca.markets and BotFather.
 
 ### Apr 22, 2026 @ 09:03 PM — Briefing upgraded: live AP/BBC headlines via fetch.py, real crypto P/L from multi_broker_portfolio, full agent-voice format. Duplicate headlines to fix next session.
+
+### Apr 23, 2026 @ 07:07 PM — Deployed: autonomous_runner.py with batch job queue. /queue, /review, /batches commands live. /brief now sends full agent briefing. Crypto blank fixed in scheduled briefings.
