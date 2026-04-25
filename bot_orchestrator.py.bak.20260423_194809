@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 import os
 import sqlite3
 from datetime import datetime
@@ -143,18 +142,6 @@ def init_orchestrator_db():
         )
         """
     )
-    c.execute(
-        """
-        CREATE TABLE IF NOT EXISTS bot_notifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            bot_id TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            message TEXT NOT NULL,
-            created TEXT NOT NULL,
-            seen INTEGER NOT NULL DEFAULT 0
-        )
-        """
-    )
     now = datetime.now().isoformat()
     for bot_id in BOT_REGISTRY:
         c.execute(
@@ -236,38 +223,6 @@ class BotOrchestrator:
         self.update_status(bot_id, "working", task)
         return task_id
 
-    def add_notification(self, bot_id: str, kind: str, message: str):
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO bot_notifications (bot_id, kind, message, created, seen) VALUES (?, ?, ?, ?, 0)",
-            (bot_id, kind, message, datetime.now().isoformat()),
-        )
-        conn.commit()
-        conn.close()
-
-    def get_unseen_notifications(self) -> List[Dict]:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute(
-            "SELECT id, bot_id, kind, message, created FROM bot_notifications WHERE seen=0 ORDER BY id ASC LIMIT 20"
-        )
-        rows = c.fetchall()
-        if rows:
-            c.executemany("UPDATE bot_notifications SET seen=1 WHERE id=?", [(row[0],) for row in rows])
-            conn.commit()
-        conn.close()
-        return [
-            {
-                "id": row[0],
-                "bot_id": row[1],
-                "kind": row[2],
-                "message": row[3],
-                "created": row[4],
-            }
-            for row in rows
-        ]
-
     def get_task_queue(self) -> List[Dict]:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -299,24 +254,13 @@ class BotOrchestrator:
 
         synthesis_prompt = f'''Compare these three viewpoints on: {topic}
 
-SHAMAN:
-{takes['conspiracy_shaman']}
+SHAMAN:\n{takes['conspiracy_shaman']}
 
-LIB MOM:
-{takes['lib_mom']}
+LIB MOM:\n{takes['lib_mom']}
 
-MAGA DAD:
-{takes['maga_dad']}
+MAGA DAD:\n{takes['maga_dad']}
 
-Task:
-- Find 2 to 4 specific agreements shared across the viewpoints.
-- Find 2 to 4 specific disagreements.
-- Write one short neutral narrative summary.
-
-Rules:
-- Return valid JSON only.
-- No markdown fences.
-- Use this exact shape:
+Return valid JSON only with this shape:
 {{
   "agreements": ["..."],
   "disagreements": ["..."],
@@ -333,55 +277,7 @@ Rules:
             disagreements = parsed.get("disagreements", [])
             narrative = parsed.get("narrative", narrative)
         except Exception:
-            cleaned = raw.replace("```json", "").replace("```", "").strip()
-            try:
-                agreements_match = re.search(r'"agreements"\s*:\s*\[(.*?)\]', cleaned, re.S)
-                disagreements_match = re.search(r'"disagreements"\s*:\s*\[(.*?)\]', cleaned, re.S)
-                narrative_match = re.search(r'"narrative"\s*:\s*"(.*?)"', cleaned, re.S)
-
-                def parse_items(block):
-                    if not block:
-                        return []
-                    items = re.findall(r'"(.*?)"', block)
-                    return [i.strip() for i in items if i.strip()]
-
-                agreements = parse_items(agreements_match.group(1) if agreements_match else "")
-                disagreements = parse_items(disagreements_match.group(1) if disagreements_match else "")
-                if narrative_match and narrative_match.group(1).strip():
-                    narrative = narrative_match.group(1).strip()
-            except Exception:
-                fallback = await self._ollama_call(
-                    f'''Summarize this debate on "{topic}" in plain text.
-
-Return exactly this format:
-AGREEMENTS:
-- ...
-- ...
-
-DISAGREEMENTS:
-- ...
-- ...
-
-NARRATIVE:
-...
-
-SHAMAN:
-{takes["conspiracy_shaman"]}
-
-LIB MOM:
-{takes["lib_mom"]}
-
-MAGA DAD:
-{takes["magadad"] if "magadad" in takes else takes["maga_dad"]}''',
-                    timeout=60.0,
-                )
-                agreements = re.findall(r'^-\s+(.*)$', fallback.split("DISAGREEMENTS:")[0], re.M)
-                disagreement_block = ""
-                if "DISAGREEMENTS:" in fallback:
-                    disagreement_block = fallback.split("DISAGREEMENTS:", 1)[1].split("NARRATIVE:", 1)[0]
-                disagreements = re.findall(r'^-\s+(.*)$', disagreement_block, re.M)
-                if "NARRATIVE:" in fallback:
-                    narrative = fallback.split("NARRATIVE:", 1)[1].strip() or narrative
+            pass
 
         created = datetime.now().isoformat()
         conn = sqlite3.connect(DB_PATH)
@@ -471,10 +367,6 @@ MAGA DAD:
         except Exception as exc:
             self._fail_task(task_id, bot_id, str(exc))
 
-    def complete_task(self, task_id: int, bot_id: str, result: str):
-        """Public compatibility wrapper for older call sites."""
-        return self._complete_task(task_id, bot_id, result)
-
     def _complete_task(self, task_id: int, bot_id: str, result: str):
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -485,33 +377,6 @@ MAGA DAD:
         conn.commit()
         conn.close()
         self.update_status(bot_id, "review_ready", f"Task #{task_id} complete — review ready")
-        bot_name = BOT_REGISTRY.get(bot_id, {}).get("name", bot_id.upper())
-
-        title_match = re.search(r"^Title:\s*(.+)$", result or "", re.M)
-        channel_match = re.search(r"^Channel:\s*(.+)$", result or "", re.M)
-        pdf_match = re.search(r"PDF(?: saved)?:\s*(.+)$", result or "", re.M)
-        md_match = re.search(r"Markdown(?: saved)?:\s*(.+)$", result or "", re.M)
-
-        message = f"{bot_name} finished Task #{task_id}."
-        details = []
-
-        if title_match:
-            details.append(title_match.group(1).strip())
-        if channel_match:
-            details.append(f"Channel: {channel_match.group(1).strip()}")
-        if pdf_match:
-            details.append(f"PDF: {pdf_match.group(1).strip()}")
-        if md_match:
-            details.append(f"Markdown: {md_match.group(1).strip()}")
-
-        if details:
-            message += " " + " | ".join(details)
-        else:
-            preview = " ".join((result or "").split())[:180]
-            if preview:
-                message += f" Result: {preview}"
-
-        self.add_notification(bot_id, "task_complete", message)
 
     def _fail_task(self, task_id: int, bot_id: str, error: str):
         conn = sqlite3.connect(DB_PATH)
@@ -586,7 +451,3 @@ def register_routes(app):
     @app.get("/api/debate/history")
     async def api_debate_history():
         return JSONResponse(orchestrator.get_debate_history())
-
-    @app.get("/api/bots/notifications")
-    async def api_bot_notifications():
-        return JSONResponse(orchestrator.get_unseen_notifications())

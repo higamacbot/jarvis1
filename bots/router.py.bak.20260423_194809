@@ -211,17 +211,10 @@ Positions:
             
             # Build crypto portfolio context
             crypto_data = f"""
-OWNED CRYPTO PORTFOLIO DATA:
-Total Owned Crypto Value: ${sum(c['value'] for c in all_crypto.values()):,.2f}
+COMPLETE CRYPTO PORTFOLIO DATA:
+Total Crypto Value: ${sum(c['value'] for c in all_crypto.values()):,.2f}
 
-IMPORTANT RULES:
-- Use only the owned values shown below for position size.
-- Never infer or mention coin quantities unless explicitly provided.
-- Never multiply live market prices by guessed holdings.
-- Keep live market prices separate from owned portfolio values.
-- If a value is missing, say it is unavailable.
-
-Owned Positions by Broker:
+Crypto Positions by Broker:
 """
             for symbol, data in all_crypto.items():
                 pl_info = f"P/L: ${data.get('pl', 0):+,.2f}" if data.get('pl') is not None else "P/L: N/A"
@@ -245,15 +238,10 @@ Broker Breakdown:
                     r = await http_client.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd")
                     if r.status_code == 200:
                         data = r.json()
-                        market_data = (
-                            f"REFERENCE LIVE MARKET PRICES ONLY (not owned position values): "
-                            f"BTC: ${data['bitcoin']['usd']:,.2f}, "
-                            f"ETH: ${data['ethereum']['usd']:,.2f}, "
-                            f"SOL: ${data['solana']['usd']:,.2f}"
-                        )
+                        market_data = f"LIVE PRICES: BTC: ${data['bitcoin']['usd']:,.2f}, ETH: ${data['ethereum']['usd']:,.2f}, SOL: ${data['solana']['usd']:,.2f}"
                         crypto_data += f"\n{market_data}"
             except:
-                crypto_data += "\nREFERENCE LIVE MARKET PRICES ONLY: Data unavailable"
+                crypto_data += "\nLIVE PRICES: Data unavailable"
                 
             print(">> CRYPTOID ROUTER: Successfully built crypto context")
             memory_context = get_bot_memory_summary("cryptoid", user_msg)

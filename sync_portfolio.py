@@ -13,24 +13,17 @@ client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 account = client.get_account()
 print(f"Account Balance: ${float(account.buying_power):.2f} buying power")
 
-# YOUR MASTER LIST - REDUCED TO FIT BUYING POWER
+# YOUR MASTER LIST
 holdings = {
-    # Already have these stocks - skip
-    # "META": 0.2658,  # HAVE
-    # "NFLX": 1.5934,  # HAVE  
-    # "PYPL": 0.5094,  # HAVE
-    # "AMD": 0.5557,   # HAVE
-    # "TSLA": 0.1581,  # HAVE
-    # "NVDA": 0.2852,  # HAVE
-    # "VOO": 0.3587,   # HAVE
-    
-    # Crypto - need $10 minimum, can't afford
-    # "BTCUSD": 0.0062,  # NEED $589
-    # "ETHUSD": 0.0315,  # NEED $95
-    
-    # ALTERNATIVE: Add smaller crypto positions when funding available
-    # "BTCUSD": 0.0001,  # ~$9.50 (still over $6.37)
-    # "ETHUSD": 0.001,   # ~$3.00 (under $10 min)
+    "META": 0.2658,
+    "NFLX": 1.5934,
+    "PYPL": 0.5094,
+    "AMD": 0.5557,
+    "TSLA": 0.1581,
+    "NVDA": 0.2852,
+    "VOO": 0.3587,
+    "BTCUSD": 0.0062,
+    "ETHUSD": 0.0315,
 }
 
 print("Mirroring Real Portfolio using Environment Variables...")

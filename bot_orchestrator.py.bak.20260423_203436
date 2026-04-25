@@ -485,32 +485,11 @@ MAGA DAD:
         conn.commit()
         conn.close()
         self.update_status(bot_id, "review_ready", f"Task #{task_id} complete — review ready")
+        preview = " ".join((result or "").split())[:220]
         bot_name = BOT_REGISTRY.get(bot_id, {}).get("name", bot_id.upper())
-
-        title_match = re.search(r"^Title:\s*(.+)$", result or "", re.M)
-        channel_match = re.search(r"^Channel:\s*(.+)$", result or "", re.M)
-        pdf_match = re.search(r"PDF(?: saved)?:\s*(.+)$", result or "", re.M)
-        md_match = re.search(r"Markdown(?: saved)?:\s*(.+)$", result or "", re.M)
-
         message = f"{bot_name} finished Task #{task_id}."
-        details = []
-
-        if title_match:
-            details.append(title_match.group(1).strip())
-        if channel_match:
-            details.append(f"Channel: {channel_match.group(1).strip()}")
-        if pdf_match:
-            details.append(f"PDF: {pdf_match.group(1).strip()}")
-        if md_match:
-            details.append(f"Markdown: {md_match.group(1).strip()}")
-
-        if details:
-            message += " " + " | ".join(details)
-        else:
-            preview = " ".join((result or "").split())[:180]
-            if preview:
-                message += f" Result: {preview}"
-
+        if preview:
+            message += f" Result: {preview}"
         self.add_notification(bot_id, "task_complete", message)
 
     def _fail_task(self, task_id: int, bot_id: str, error: str):

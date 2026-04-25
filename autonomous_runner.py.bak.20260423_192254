@@ -137,31 +137,6 @@ async def handle_channel_discovery(payload, jid, manager):
     except Exception as e:
         return None, f"Error: {e}"
 
-async def handle_autopilot_scan(payload, jid, manager):
-    print(f">> JOB #{jid}: autopilot_scan")
-    try:
-        import sys
-        sys.path.insert(0, "/Users/higabot1/jarvis1-1")
-        from jarvis_autopilot import get_signal, execute_trade, TICKERS
-        results = []
-        for ticker in TICKERS:
-            try:
-                signal = get_signal(ticker)
-                if signal in ["BUY", "SELL"]:
-                    execute_trade(ticker, signal)
-                    results.append(f"{signal} {ticker}")
-                    try:
-                        from bot_memory import save_bot_memory
-                        save_bot_memory("stockbot", f"Autopilot {signal} signal on {ticker}")
-                    except Exception:
-                        pass
-            except Exception as e:
-                results.append(f"SKIP {ticker}: {e}")
-        summary = ", ".join(results) if results else "No signals — all HOLD"
-        return None, f"Autopilot scan complete: {summary}"
-    except Exception as e:
-        return None, f"Autopilot error: {e}"
-
 async def handle_debate_to_pdf(payload, jid, manager):
     topic = payload.get("topic","")
     try:

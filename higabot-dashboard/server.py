@@ -108,9 +108,7 @@ async def get_kraken_data():
         positions = []
         if balance_result.returncode == 0:
             balance_data = json.loads(balance_result.stdout)
-            # Handle the new JSON format with "balances" object
-            balances = balance_data.get("balances", {})
-            for asset, info in balances.items():
+            for asset, info in balance_data.items():
                 if asset != "USD" and float(info.get("available", 0)) > 0:
                     positions.append({
                         "symbol": asset,

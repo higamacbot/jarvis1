@@ -197,18 +197,13 @@ def get_transcript(video_input: str, max_chars: int = 12000) -> dict:
         video_id = extract_video_id(video_input)
         ytt = YouTubeTranscriptApi()
         fetched = ytt.fetch(video_id)
-
-        # youtube-transcript-api may return snippet objects rather than plain dicts.
-        transcript_parts = []
-        for item in fetched:
-            if isinstance(item, dict):
-                text = item.get("text", "")
-            else:
-                text = getattr(item, "text", "")
-            if text:
-                transcript_parts.append(text)
-
-        full_text = " ".join(transcript_parts).strip()
+        # Handle FetchedTranscriptSnippet object properly
+        transcript_data = fetched.to_dict() if hasattr(fetched, 'to_dict') else fetched
+        if isinstance(transcript_data, dict) and 'transcript' in transcript_data:
+            transcript_list = transcript_data['transcript']
+        else:
+            transcript_list = transcript_data if isinstance(transcript_data, list) else []
+        full_text = " ".join([t['text'] for t in transcript_list])
 
         # Get video metadata for PDF and markdown
         info = get_video_info(video_input)
@@ -219,7 +214,7 @@ def get_transcript(video_input: str, max_chars: int = 12000) -> dict:
         pdf_path = save_transcript_pdf(video_id, title, channel, full_text)
         md_path = None
         if pdf_path:
-            md_path = save_transcript_markdown(video_id, title, channel, video_url, full_text, pdf_path)
+            md_path = save_transcript_markdown(video_id, title, channel, video_url, full_text[:max_chars], pdf_path)
 
         return {
             "video_id": video_id,

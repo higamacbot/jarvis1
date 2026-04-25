@@ -166,10 +166,8 @@ async def generate_briefing(time_of_day):
     # Format positions with emojis
     positions_str = ""
     for pos in portfolio['positions']:
-        pl = pos.get('pl', 0)
-        emoji = "ð" if (pl is not None and pl >= 0) else "ð"
-        pl_display = pl if pl is not None else 0
-        positions_str += f"{emoji} {pos['symbol']}: ${pos['value']:,.2f} ({pl_display:+.2f})\n"
+        emoji = "ð" if pos['pl'] >= 0 else "ð"
+        positions_str += f"{emoji} {pos['symbol']}: ${pos['value']:,.2f} ({pos['pl']:+.2f})\n"
     
     # Get current time in proper format
     from datetime import datetime

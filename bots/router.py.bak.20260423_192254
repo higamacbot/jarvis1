@@ -3,16 +3,6 @@ Clean router with proper imports and error handling
 """
 
 from bots import stockbot
-import sys
-sys.path.insert(0, "/Users/higabot1/jarvis1-1")
-try:
-    from bot_memory import save_bot_memory, extract_durable_takeaway, get_bot_memory_summary
-    BOT_MEMORY_AVAILABLE = True
-except Exception:
-    BOT_MEMORY_AVAILABLE = False
-    def save_bot_memory(*a, **k): pass
-    def extract_durable_takeaway(*a, **k): return ""
-    def get_bot_memory_summary(*a, **k): return 
 from bots import cryptoid
 from bots import doctorbot
 from bots import ultron
@@ -182,14 +172,7 @@ Positions:
             except:
                 portfolio_data += "\nCRYPTO: Data unavailable"
                 
-            memory_context = get_bot_memory_summary("stockbot", user_msg)
-            if memory_context:
-                portfolio_data += f"\n\n{memory_context}"
-            reply = await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT, extra_context=portfolio_data)
-            takeaway = extract_durable_takeaway(user_msg, reply)
-            if takeaway:
-                save_bot_memory("stockbot", takeaway)
-            return reply
+            return await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT, extra_context=portfolio_data)
                     
         except Exception as e:
             error_context = f"PORTFOLIO ERROR: {e}"
@@ -211,17 +194,10 @@ Positions:
             
             # Build crypto portfolio context
             crypto_data = f"""
-OWNED CRYPTO PORTFOLIO DATA:
-Total Owned Crypto Value: ${sum(c['value'] for c in all_crypto.values()):,.2f}
+COMPLETE CRYPTO PORTFOLIO DATA:
+Total Crypto Value: ${sum(c['value'] for c in all_crypto.values()):,.2f}
 
-IMPORTANT RULES:
-- Use only the owned values shown below for position size.
-- Never infer or mention coin quantities unless explicitly provided.
-- Never multiply live market prices by guessed holdings.
-- Keep live market prices separate from owned portfolio values.
-- If a value is missing, say it is unavailable.
-
-Owned Positions by Broker:
+Crypto Positions by Broker:
 """
             for symbol, data in all_crypto.items():
                 pl_info = f"P/L: ${data.get('pl', 0):+,.2f}" if data.get('pl') is not None else "P/L: N/A"
@@ -245,25 +221,13 @@ Broker Breakdown:
                     r = await http_client.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd")
                     if r.status_code == 200:
                         data = r.json()
-                        market_data = (
-                            f"REFERENCE LIVE MARKET PRICES ONLY (not owned position values): "
-                            f"BTC: ${data['bitcoin']['usd']:,.2f}, "
-                            f"ETH: ${data['ethereum']['usd']:,.2f}, "
-                            f"SOL: ${data['solana']['usd']:,.2f}"
-                        )
+                        market_data = f"LIVE PRICES: BTC: ${data['bitcoin']['usd']:,.2f}, ETH: ${data['ethereum']['usd']:,.2f}, SOL: ${data['solana']['usd']:,.2f}"
                         crypto_data += f"\n{market_data}"
             except:
-                crypto_data += "\nREFERENCE LIVE MARKET PRICES ONLY: Data unavailable"
+                crypto_data += "\nLIVE PRICES: Data unavailable"
                 
             print(">> CRYPTOID ROUTER: Successfully built crypto context")
-            memory_context = get_bot_memory_summary("cryptoid", user_msg)
-            if memory_context:
-                crypto_data += f"\n\n{memory_context}"
-            reply = await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT, extra_context=crypto_data)
-            takeaway = extract_durable_takeaway(user_msg, reply)
-            if takeaway:
-                save_bot_memory("cryptoid", takeaway)
-            return reply
+            return await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT, extra_context=crypto_data)
             
         except Exception as e:
             print(f">> CRYPTOID ROUTER ERROR: {e}")
@@ -290,43 +254,5 @@ Broker Breakdown:
         elif q == "repo health":
             from bots.doctorbot import repo_health
             return repo_health()
-
-    # Robowright commands
-    if bot_id == "robowright":
-        q = user_msg.lower().strip()
-        if q.startswith("pitch "):
-            topic = user_msg[6:].strip()
-            from bots.robowright_media import pitch_video_concept
-            return await pitch_video_concept(topic)
-        elif q.startswith("batch "):
-            theme = user_msg[6:].strip()
-            from bots.robowright_media import batch_content_plan
-            return await batch_content_plan(theme)
-        elif q.startswith("trending audio"):
-            niche = user_msg[14:].strip() or "finance"
-            from bots.robowright_media import find_trending_audio
-            return await find_trending_audio(niche)
-
-    # Jamz commands
-    if bot_id == "jamz":
-        q = user_msg.lower().strip()
-        if q.startswith("beat "):
-            vibe = user_msg[5:].strip()
-            from bots.jamz_engine import design_beat
-            return await design_beat(vibe)
-        elif q.startswith("set "):
-            event = user_msg[4:].strip()
-            from bots.jamz_engine import plan_dj_set
-            return await plan_dj_set(event)
-        elif q.startswith("playlist "):
-            mood = user_msg[9:].strip()
-            from bots.jamz_engine import build_playlist
-            return await build_playlist(mood)
-        elif q.startswith("mashup "):
-            parts = user_msg[7:].strip().split(" vs ")
-            if len(parts) == 2:
-                from bots.jamz_engine import mashup_concept
-                return await mashup_concept(parts[0].strip(), parts[1].strip())
-            return "Usage: mashup <track 1> vs <track 2>"
 
     return await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT)

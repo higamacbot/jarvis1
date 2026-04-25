@@ -281,6 +281,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(fetch_crypto()),
         asyncio.create_task(fetch_alpaca()),
         asyncio.create_task(orchestrator.background_worker()),
+        asyncio.create_task(run_pipeline_scheduler()),
         asyncio.create_task(runner.run()),
     ]
     yield

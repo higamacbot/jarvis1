@@ -24,7 +24,6 @@ from youtube_tools import handle_youtube_request
 from trading import is_trade_command, parse_trade_intent, execute_trade_intent, get_trade_history
 from bots.router import route_message
 from pipeline_yt_to_bots import run_pipeline_scheduler, run_youtube_pipeline
-from mac_tools import detect_mac_command
 from autonomous_runner import runner, queue_youtube_playlist, queue_channel
 from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, analyze_ticker, analyze_portfolio
 
@@ -281,6 +280,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(fetch_crypto()),
         asyncio.create_task(fetch_alpaca()),
         asyncio.create_task(orchestrator.background_worker()),
+        asyncio.create_task(run_pipeline_scheduler()),
         asyncio.create_task(runner.run()),
     ]
     yield
@@ -492,7 +492,7 @@ async def house_websocket(websocket: WebSocket):
                 continue
             await websocket.send_json({"type": "thinking", "bot": bot_id})
 
-            if user_msg.lower().startswith("/bots"):
+            if bot_id == "jarvisbot" and user_msg.lower().startswith("/bots"):
                 statuses = orchestrator.get_all_statuses()
                 lines = [
                     f"{v['icon']} {v['name']}: {v['status'].upper()} — {v['current_task']}"
@@ -501,7 +501,7 @@ async def house_websocket(websocket: WebSocket):
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": "\n".join(lines)})
                 continue
 
-            if user_msg.lower().startswith("/assign "):
+            if bot_id == "jarvisbot" and user_msg.lower().startswith("/assign "):
                 parts = user_msg[8:].strip().split(" ", 1)
                 if len(parts) == 2:
                     target_bot, task = parts
@@ -515,7 +515,7 @@ async def house_websocket(websocket: WebSocket):
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
                 continue
 
-            if user_msg.lower().startswith("/debate "):
+            if bot_id == "jarvisbot" and user_msg.lower().startswith("/debate "):
                 topic = user_msg[8:].strip()
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": f"⚡ Starting debate on: {topic}..."})
                 result = await orchestrator.run_debate(topic)
@@ -579,13 +579,6 @@ Do not mention any inability to access external content."""
                 print(">> YOUTUBE DEBUG: Direct YouTube response")
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": yt_result})
                 continue
-
-            # Mac command (Jarvis room only)
-            if bot_id == "jarvisbot":
-                mac_result = detect_mac_command(user_msg)
-                if mac_result:
-                    await websocket.send_json({"type": "answer", "bot": bot_id, "text": mac_result})
-                    continue
 
             # Queue command
             if user_msg.lower().startswith("/queue "):

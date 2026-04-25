@@ -442,7 +442,6 @@ function showTT(e,text){
 }
 
 let ws;
-let lastNotificationPoll = 0;
 function connect(){
   const proto=location.protocol==='https:'?'wss':'ws';
   ws=new WebSocket(`${proto}://${location.host}/ws/house`);
@@ -560,47 +559,9 @@ async function pollBotStatuses() {
   }
 }
 
-async function pollBotNotifications() {
-  try {
-    const now = Date.now();
-    if (now - lastNotificationPoll < 1500) return;
-    lastNotificationPoll = now;
-
-    const r = await fetch('/api/bots/notifications');
-    if (!r.ok) return;
-
-    const notes = await r.json();
-    if (!Array.isArray(notes) || !notes.length) return;
-
-    for (const note of notes) {
-      const botId = note.bot_id || 'jarvisbot';
-      addMsg('bot', note.message, botId);
-
-      const room = document.getElementById('room-' + botId);
-      if (room) {
-        room.style.borderColor = '#00FF88';
-        room.style.boxShadow = '0 0 25px rgba(0,255,136,0.7)';
-        setTimeout(async () => {
-          try {
-            const sr = await fetch('/api/bots/status');
-            if (sr.ok) {
-              const statuses = await sr.json();
-              applyBotStatuses(statuses);
-            }
-          } catch (e) {}
-        }, 1200);
-      }
-    }
-  } catch(e) {
-    console.warn('Bot notification poll failed:', e);
-  }
-}
-
 // Poll immediately then every 3 seconds
 pollBotStatuses();
-pollBotNotifications();
 setInterval(pollBotStatuses, 3000);
-setInterval(pollBotNotifications, 2500);
 // ──────────────────────────────────────────────────────────────────────────
 
 </script>
