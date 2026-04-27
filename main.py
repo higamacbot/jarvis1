@@ -551,6 +551,19 @@ async def house_websocket(websocket: WebSocket):
 
             # YouTube PATH (jarvisbot only)
             print(f">> YOUTUBE DEBUG: Processing YouTube request in /ws/house endpoint")
+            # Skip YouTube handler for creative bots — they handle their own routing
+            _creative_skip = False
+            if bot_id == "robowright" and any(user_msg.lower().startswith(k) for k in ["pitch ", "batch ", "trending"]):
+                _creative_skip = True
+            if bot_id == "jamz" and any(user_msg.lower().startswith(k) for k in ["beat ", "set ", "playlist ", "mashup "]):
+                _creative_skip = True
+
+            if _creative_skip:
+                reply = await route_message(bot_id, user_msg, ask_ollama)
+                memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                continue
+
             yt_result, yt_mode = await asyncio.to_thread(handle_youtube_request, user_msg)
             print(f">> YOUTUBE DEBUG: yt_result length={len(yt_result) if yt_result else 0}, mode={yt_mode}")
             if yt_result and yt_mode == "youtube_summarize":
