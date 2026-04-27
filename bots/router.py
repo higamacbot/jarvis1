@@ -296,8 +296,12 @@ Broker Breakdown:
         q = user_msg.lower().strip()
         if q.startswith("pitch "):
             topic = user_msg[6:].strip()
-            from bots.robowright_media import pitch_video_concept
-            return await pitch_video_concept(topic)
+            from bots.robowright_media import pitch_video_concept, save_script
+            result = await pitch_video_concept(topic)
+            save_script(topic, result)
+            from mac_tools import create_imovie_script_package
+            launch_msg = create_imovie_script_package(topic, result)
+            return result + f"\n\n---\n{launch_msg}" 
         elif q.startswith("batch "):
             theme = user_msg[6:].strip()
             from bots.robowright_media import batch_content_plan
@@ -306,6 +310,12 @@ Broker Breakdown:
             niche = user_msg[14:].strip() or "finance"
             from bots.robowright_media import find_trending_audio
             return await find_trending_audio(niche)
+        elif q in ["open imovie", "imovie", "launch imovie"]:
+            from mac_tools import open_imovie
+            return open_imovie()
+        elif q in ["open final cut", "final cut", "finalcut"]:
+            from mac_tools import open_final_cut
+            return open_final_cut()
 
     # Jamz commands
     if bot_id == "jamz":
@@ -313,7 +323,13 @@ Broker Breakdown:
         if q.startswith("beat "):
             vibe = user_msg[5:].strip()
             from bots.jamz_engine import design_beat
-            return await design_beat(vibe)
+            result = await design_beat(vibe)
+            import re
+            bpm_match = re.search(r'BPM[:\s]+(\d+)', result)
+            bpm = int(bpm_match.group(1)) if bpm_match else 120
+            from mac_tools import create_garageband_template
+            launch_msg = create_garageband_template(vibe, bpm)
+            return result + f"\n\n---\n{launch_msg}" 
         elif q.startswith("set "):
             event = user_msg[4:].strip()
             from bots.jamz_engine import plan_dj_set
