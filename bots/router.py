@@ -351,4 +351,25 @@ Broker Breakdown:
             from mac_tools import open_logic_pro
             return open_logic_pro()
 
+    # PC Control commands — available to all bots
+    q = user_msg.lower().strip()
+    if q == "screenshot":
+        from pc_control import jarvis_screenshot_status
+        return jarvis_screenshot_status()
+    if q.startswith("run "):
+        from pc_control import run_command
+        return run_command(user_msg[4:].strip())
+    if q in ["open last project", "open project"]:
+        from pc_control import robowright_open_last_project
+        return robowright_open_last_project()
+    if q in ["open last beat", "open beat"]:
+        from pc_control import jamz_open_last_beat
+        return jamz_open_last_beat()
+    if q in ["health check", "run tests", "compile check"]:
+        from pc_control import doctorbot_run_health_check
+        return doctorbot_run_health_check()
+    if q in ["git status", "repo status"]:
+        from pc_control import doctorbot_git_status
+        return doctorbot_git_status()
+
     return await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT)
