@@ -13,7 +13,7 @@ GEMINI_KEY    = os.getenv("GEMINI_API_KEY")
 OPENAI_KEY    = os.getenv("OPENAI_API_KEY")
 ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY")
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
 # Which provider each bot prefers
 BOT_PROVIDER = {
