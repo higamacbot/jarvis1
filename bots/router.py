@@ -290,6 +290,39 @@ Broker Breakdown:
         elif q == "repo health":
             from bots.doctorbot import repo_health
             return repo_health()
+        elif q == "see and fix" or q == "fix screen":
+            from doctorbot_vision import doctorbot_see_and_fix
+            return await doctorbot_see_and_fix()
+        elif q.startswith("see and fix ") and "push" in q:
+            parts = q.replace("see and fix ", "").replace(" push", "").strip()
+            from doctorbot_vision import doctorbot_see_and_fix
+            return await doctorbot_see_and_fix(target_file=parts, auto_push=True)
+        elif q.startswith("see and fix "):
+            target = user_msg[12:].strip()
+            from doctorbot_vision import doctorbot_see_and_fix
+            return await doctorbot_see_and_fix(target_file=target)
+        elif q in ["fix all", "scan and fix", "fix all push"]:
+            auto_push = "push" in q
+            from doctorbot_vision import doctorbot_scan_and_fix_all
+            return await doctorbot_scan_and_fix_all(auto_push=auto_push)
+        elif q.startswith("write ") or q.startswith("code "):
+            prompt = user_msg.split(" ", 1)[1].strip()
+            from doctorbot_vision import doctorbot_write_code
+            return await doctorbot_write_code(prompt)
+        elif q.startswith("apply ") and " to " in q:
+            parts = q[6:].split(" to ")
+            from doctorbot_vision import doctorbot_apply_draft
+            return await doctorbot_apply_draft(parts[0].strip(), parts[1].strip())
+        elif q == "push fix":
+            from bots.doctorbot import git_commit_and_push
+            return git_commit_and_push("fix: doctorbot auto-fix applied")
+        elif q == "github diff":
+            from doctorbot_vision import get_github_diff
+            return get_github_diff()
+        elif q == "screenshot":
+            from doctorbot_vision import take_screenshot
+            path = take_screenshot("doctorbot_manual")
+            return f"Screenshot saved: {path}"
 
     # Robowright commands
     if bot_id == "robowright":
