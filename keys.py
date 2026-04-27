@@ -4,6 +4,4 @@ import os
 ALPACA_KEY = os.getenv('ALPACA_KEY')
 ALPACA_SECRET = os.getenv('ALPACA_SECRET')
 
-# Example usage: print the credentials (remove this line in production)
-print(f"API Key: {ALPACA_KEY}")
-print(f"Secret Key: {ALPACA_SECRET}")
+# Keys loaded from environment — never print secrets to logs
