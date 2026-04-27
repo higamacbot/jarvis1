@@ -217,3 +217,5 @@
 ### Apr 26, 2026 @ 09:58 PM — SESSION COMPLETE Apr 26: Robowright/Jamz YouTube bypass fixed. Robowright pitch now generates full video scripts + opens iMovie. Jamz beat generates full beat design with Suno/Udio prompts + opens GarageBand. Both save files to clips/ and beats/. BPM auto-extracted for GarageBand setup.
 
 ### Apr 26, 2026 @ 10:00 PM — MILESTONE: Robowright fully operational. pitch command generates complete TikTok/Shorts scripts with hook/script/edit notes/audio/caption, saves to clips/, opens iMovie with production package in ~/Movies/HIGA HOUSE Productions/. Jamz generates beat designs with Suno/Udio prompts, saves to beats/, opens GarageBand at correct BPM.
+
+### Apr 27, 2026 @ 06:36 AM — llm_router.py deployed: Gemini 2.0 Flash free tier (1500/day) wired in. Robowright, Jamz, Doctorbot, Pinkslip, Ultron, Higashop, Teacherbot now use Gemini. Ollama fallback always active. Add OPENAI_API_KEY or ANTHROPIC_API_KEY to .env to enable those providers.
