@@ -211,3 +211,5 @@
 ### Apr 23, 2026 @ 07:15 PM — ROADMAP logged: Phase 1 stability, Phase 2 intelligence, Phase 3 content pipeline, Phase 4 HIGASHOP business, Phase 5 expansion. See JARVIS_CONTEXT.md for full plan.
 
 ### Apr 25, 2026 @ 10:52 AM — SESSION COMPLETE: Phase 1+2 deployed. bot_memory.py ChromaDB per-bot namespaces, autopilot_scan job type, robowright pitch/batch/trending, jamz beat/set/playlist/mashup, notifications API polling, briefing fixed with real crypto+headlines, autonomous runner /queue /review /batches live, pipeline removed from auto-start, 36 old tasks cleaned, keys.py print removed.
+
+### Apr 26, 2026 @ 09:34 PM — Robowright: pitch command auto-opens iMovie with script+shot list package in ~/Movies/HIGA HOUSE Productions. Jamz: beat command auto-opens GarageBand with BPM setup note in ~/Music/GarageBand Projects. Voice commands: open imovie, open garageband, final cut, logic pro.
