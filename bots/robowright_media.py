@@ -7,13 +7,27 @@ MODEL = "qwen3:8b"
 CLIPS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "clips")
 os.makedirs(CLIPS_DIR, exist_ok=True)
 
-async def _ask(prompt: str, timeout: float = 60.0) -> str:
+async def _ask(prompt: str, timeout: float = 90.0) -> str:
+    import httpx as _httpx
     try:
-        async with httpx.AsyncClient(timeout=timeout) as h:
+        async with _httpx.AsyncClient(timeout=timeout) as h:
             r = await h.post(OLLAMA_URL, json={"model": MODEL, "prompt": prompt, "stream": False})
-            return r.json().get("response", "").strip()
+            data = r.json()
+            return data.get("response", "").strip()
     except Exception as e:
-        return f"Robowright error: {e}"
+        # Fallback: try sync request
+        try:
+            import urllib.request, json as _json
+            req = urllib.request.Request(
+                OLLAMA_URL,
+                data=_json.dumps({"model": MODEL, "prompt": prompt, "stream": False}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                return _json.loads(resp.read()).get("response", "").strip()
+        except Exception as e2:
+            return f"Robowright error: {e} | fallback: {e2}"
 
 def save_script(title: str, content: str) -> str:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
