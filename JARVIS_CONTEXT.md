@@ -213,3 +213,5 @@
 ### Apr 25, 2026 @ 10:52 AM — SESSION COMPLETE: Phase 1+2 deployed. bot_memory.py ChromaDB per-bot namespaces, autopilot_scan job type, robowright pitch/batch/trending, jamz beat/set/playlist/mashup, notifications API polling, briefing fixed with real crypto+headlines, autonomous runner /queue /review /batches live, pipeline removed from auto-start, 36 old tasks cleaned, keys.py print removed.
 
 ### Apr 26, 2026 @ 09:34 PM — Robowright: pitch command auto-opens iMovie with script+shot list package in ~/Movies/HIGA HOUSE Productions. Jamz: beat command auto-opens GarageBand with BPM setup note in ~/Music/GarageBand Projects. Voice commands: open imovie, open garageband, final cut, logic pro.
+
+### Apr 26, 2026 @ 09:58 PM — SESSION COMPLETE Apr 26: Robowright/Jamz YouTube bypass fixed. Robowright pitch now generates full video scripts + opens iMovie. Jamz beat generates full beat design with Suno/Udio prompts + opens GarageBand. Both save files to clips/ and beats/. BPM auto-extracted for GarageBand setup.
