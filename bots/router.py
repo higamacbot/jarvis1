@@ -344,5 +344,11 @@ Broker Breakdown:
                 from bots.jamz_engine import mashup_concept
                 return await mashup_concept(parts[0].strip(), parts[1].strip())
             return "Usage: mashup <track 1> vs <track 2>"
+        elif q in ["open garageband", "garageband", "garage band"]:
+            from mac_tools import open_garageband
+            return open_garageband()
+        elif q in ["open logic", "logic pro", "logic"]:
+            from mac_tools import open_logic_pro
+            return open_logic_pro()
 
     return await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT)
