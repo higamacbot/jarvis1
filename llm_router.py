@@ -119,7 +119,7 @@ async def ask(
     p = provider or BOT_PROVIDER.get(bot_id, "ollama")
     print(f">> LLM ROUTER: {bot_id} -> {p}")
 
-    if p == "ollama" and GEMINI_KEY:
+    if p == "gemini" and GEMINI_KEY:
         return await ask_gemini(prompt, system, timeout)
     elif p == "openai" and OPENAI_KEY:
         return await ask_openai(prompt, system)
