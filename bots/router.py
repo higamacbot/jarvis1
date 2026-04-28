@@ -78,6 +78,31 @@ Response length per bot is based on what they actually have to report: if no upd
 async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
     print(f">> ROUTER DEBUG: bot_id = '{bot_id}'")
     
+    # Roundtable creative requests — hand off to Robowright
+    if bot_id == "roundtable":
+        q = user_msg.lower().strip()
+        creative_triggers = ["make me a video", "make a video", "make me a youtube",
+                             "make a youtube", "make me a short", "make a short",
+                             "create a video", "make me a tiktok", "create a tiktok"]
+        if any(t in q for t in creative_triggers):
+            topic = user_msg.strip()
+            from bots.robowright_media import pitch_video_concept, save_script
+            from mac_tools import create_imovie_script_package
+            result = await pitch_video_concept(topic)
+            save_script(topic, result)
+            launch_msg = create_imovie_script_package(topic, result)
+            return f"ROBOWRIGHT\n{result}\n\n---\n{launch_msg}"
+        beat_triggers = ["make me a beat", "make a beat", "make music", "make me music"]
+        if any(t in q for t in beat_triggers):
+            from bots.jamz_engine import design_beat
+            from mac_tools import create_garageband_template
+            result = await design_beat(user_msg)
+            import re
+            bpm_match = re.search(r'BPM[:\s]+(\d+)', result)
+            bpm = int(bpm_match.group(1)) if bpm_match else 120
+            launch_msg = create_garageband_template(user_msg, bpm)
+            return f"JAMZ\n{result}\n\n---\n{launch_msg}"
+
     if bot_id == "roundtable":
         import httpx
         from multi_broker_portfolio import MultiBrokerPortfolio
@@ -290,6 +315,32 @@ Broker Breakdown:
         elif q == "repo health":
             from bots.doctorbot import repo_health
             return repo_health()
+        elif q.startswith("draft improvement "):
+            filename = user_msg[18:].strip()
+            from bots.doctorbot import draft_improvement
+            return await draft_improvement(filename)
+        elif q.startswith("draft feature "):
+            desc = user_msg[14:].strip()
+            from bots.doctorbot import draft_new_feature
+            return await draft_new_feature(desc)
+        elif q.startswith("draft fix "):
+            desc = user_msg[10:].strip()
+            from bots.doctorbot import draft_bug_fix
+            return await draft_bug_fix(desc)
+        elif q == "draft summary":
+            from bots.doctorbot import draft_session_summary
+            return await draft_session_summary()
+        elif q == "list drafts":
+            from bots.doctorbot import list_drafts
+            return list_drafts()
+        elif q.startswith("cat draft "):
+            import os
+            fname = user_msg[10:].strip()
+            path = f"/Users/higabot1/jarvis1-1/drafts/{fname}"
+            if os.path.exists(path):
+                with open(path) as f:
+                    return f.read()
+            return f"Draft not found: {fname}"
         elif q == "see and fix" or q == "fix screen":
             from doctorbot_vision import doctorbot_see_and_fix
             return await doctorbot_see_and_fix()

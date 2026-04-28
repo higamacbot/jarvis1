@@ -379,3 +379,298 @@ async def review_file_openclaw(filename: str) -> str:
         return "OpenClaw not configured yet. Add OPENCLAW_API_KEY to .env when ready."
     # TODO: implement when API confirmed
     return "OpenClaw integration pending API key."
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DRAFT WRITER — Doctorbot writes improvement drafts for human review
+# ─────────────────────────────────────────────────────────────────────────────
+
+import httpx as _httpx
+
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL      = "qwen3:8b"
+DRAFTS_DIR = "/Users/higabot1/jarvis1-1/drafts"
+
+async def _ask_doctor(prompt: str, timeout: float = 120.0) -> str:
+    """Internal Ollama call for Doctorbot drafts."""
+    try:
+        async with _httpx.AsyncClient(timeout=timeout) as h:
+            r = await h.post(OLLAMA_URL, json={
+                "model": MODEL,
+                "prompt": prompt,
+                "stream": False
+            })
+            return r.json().get("response", "").strip()
+    except Exception as e:
+        return f"Doctorbot error: {e}"
+
+
+def _save_draft(title: str, content: str) -> str:
+    """Save a draft file and return the path."""
+    import os
+    from datetime import datetime
+    os.makedirs(DRAFTS_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    safe = title.replace(" ", "_")[:40]
+    path = os.path.join(DRAFTS_DIR, f"{timestamp}_{safe}.md")
+    with open(path, "w") as f:
+        f.write(f"# DOCTORBOT DRAFT: {title}\n")
+        f.write(f"**Generated:** {datetime.now().strftime('%B %d, %Y @ %I:%M %p')}\n\n")
+        f.write(content)
+    return path
+
+
+def read_current_file(filename: str) -> str:
+    """Read a project file for analysis."""
+    import os
+    candidates = [
+        os.path.join(REPO_PATH, filename),
+        os.path.join(REPO_PATH, "bots", filename),
+        os.path.join(REPO_PATH, "frontend", filename),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            with open(path) as f:
+                return f.read()
+    return f"File not found: {filename}"
+
+
+async def draft_improvement(filename: str) -> str:
+    """
+    Doctorbot reads a file and writes an improvement draft.
+    Draft is saved to drafts/ folder — paste it here for review.
+
+    Usage in HIGA HOUSE Doctorbot room:
+    draft improvement main.py
+    draft improvement bots/router.py
+    draft improvement briefing_scheduler.py
+    """
+    content = read_current_file(filename)
+    if "not found" in content:
+        return content
+
+    prompt = f"""You are Doctorbot, senior software engineer for HIGA HOUSE JARVIS.
+
+Analyze this file and write a structured improvement draft.
+
+CODEBASE RULES:
+- sys.path.insert(0, "/Users/higabot1/jarvis1-1") not sys.path.append("..")
+- os.getenv() for all API keys, never hardcode
+- async/await for httpx calls
+- No news_scraper.py or market_scraper.py
+- pdf_safe_text() for all FPDF content
+
+FILE: {filename}
+---
+{content[:5000]}
+---
+
+Write a draft with these exact sections:
+
+## ISSUES FOUND
+[List each bug or risk with file + line reference]
+
+## SUGGESTED IMPROVEMENTS
+[For each improvement, write the EXACT old code and new code to paste]
+
+## PASTE THIS TO FIX
+[Ready-to-run terminal commands the user can copy-paste]
+
+## PRIORITY
+[HIGH / MEDIUM / LOW and why]
+
+Be specific. Reference exact line numbers. Write code the user can actually paste."""
+
+    result = await _ask_doctor(prompt)
+    path = _save_draft(f"improvement_{filename.replace('/', '_')}", result)
+
+    return f"""📋 DOCTORBOT DRAFT WRITTEN
+File analyzed: {filename}
+Draft saved: {path}
+
+{result[:800]}...
+
+---
+NEXT STEP: Copy the draft contents and paste them to Claude for review.
+Run this to see the full draft:
+  cat {path}"""
+
+
+async def draft_new_feature(description: str) -> str:
+    """
+    Doctorbot designs a new feature and writes the implementation draft.
+
+    Usage:
+    draft feature add weather bot to HIGA HOUSE
+    draft feature wire pinkslip to live odds API
+    draft feature add voice input to JARVIS
+    """
+    prompt = f"""You are Doctorbot, senior software engineer for HIGA HOUSE JARVIS.
+
+Design and write an implementation draft for this feature:
+{description}
+
+SYSTEM CONTEXT:
+- FastAPI server (main.py) on port 8000
+- 15 bots routed via bots/router.py
+- Ollama qwen3:8b as LLM backend
+- SQLite + ChromaDB memory
+- mac_tools.py for Mac control
+- fetch.py for web scraping (DO NOT create news_scraper.py)
+- multi_broker_portfolio.py for real portfolio data
+- briefing_scheduler.py for 5AM/5PM briefings
+- autonomous_runner.py for background jobs
+
+Write the draft with these sections:
+
+## FEATURE: {description}
+
+## FILES TO CHANGE
+[List each file and exactly what changes]
+
+## NEW CODE TO ADD
+[Write the actual Python code, ready to paste]
+
+## ROUTER CHANGES
+[Exact addition to bots/router.py if needed]
+
+## TERMINAL COMMANDS
+[Step by step paste-ready commands to deploy]
+
+## TEST COMMAND
+[How to verify it works after deployment]"""
+
+    result = await _ask_doctor(prompt, timeout=120.0)
+    path = _save_draft(f"feature_{description[:40].replace(' ', '_')}", result)
+
+    return f"""💡 DOCTORBOT FEATURE DRAFT
+Feature: {description}
+Draft saved: {path}
+
+{result[:800]}...
+
+---
+NEXT STEP: Paste the draft to Claude for review before deploying."""
+
+
+async def draft_bug_fix(description: str) -> str:
+    """
+    Doctorbot investigates a bug and writes the fix draft.
+
+    Usage:
+    draft fix roundtable timeout
+    draft fix crypto showing wrong values
+    draft fix briefing crypto section blank
+    """
+    # First scan for compile errors
+    bugs = scan_for_bugs()
+
+    prompt = f"""You are Doctorbot, senior software engineer for HIGA HOUSE JARVIS.
+
+Investigate this bug and write a fix draft:
+BUG: {description}
+
+CURRENT COMPILE STATUS:
+{bugs}
+
+CODEBASE RULES:
+- sys.path.insert(0, "/Users/higabot1/jarvis1-1") not sys.path.append("..")
+- os.getenv() for keys, never hardcode
+- async/await for httpx, timeout=240 for roundtable
+- Roundtable timeout was previously hardcoded at 120s causing Neural Link Error
+
+Write the fix draft with these sections:
+
+## BUG ANALYSIS
+[What is likely causing this bug]
+
+## FILES TO CHECK
+[Which files to look at and what to look for]
+
+## THE FIX
+[Exact old code and new code, ready to paste]
+
+## TERMINAL COMMANDS
+[Step by step paste-ready fix commands]
+
+## HOW TO VERIFY
+[How to confirm the bug is fixed]"""
+
+    result = await _ask_doctor(prompt, timeout=120.0)
+    path = _save_draft(f"bugfix_{description[:40].replace(' ', '_')}", result)
+
+    return f"""🔧 DOCTORBOT BUG FIX DRAFT
+Bug: {description}
+Draft saved: {path}
+
+{result[:800]}...
+
+---
+NEXT STEP: Paste the draft to Claude for review before applying."""
+
+
+async def draft_session_summary() -> str:
+    """
+    Doctorbot reads JARVIS_CONTEXT.md and writes a session summary
+    with the top 5 things to work on next.
+
+    Usage:
+    draft summary
+    """
+    try:
+        with open(CONTEXT_FILE) as f:
+            context = f.read()[-3000:]  # last 3000 chars = recent history
+    except Exception as e:
+        context = f"Could not read context: {e}"
+
+    prompt = f"""You are Doctorbot, senior software engineer for HIGA HOUSE JARVIS.
+
+Read this project context and write a session summary with next steps.
+
+RECENT CONTEXT:
+{context}
+
+Write the summary with these sections:
+
+## WHAT WAS BUILT (last sessions)
+[Bullet list of completed features]
+
+## CURRENT SYSTEM STATUS
+[What's working, what's not]
+
+## TOP 5 NEXT STEPS (priority order)
+[Each with: what it is, why it matters, estimated effort]
+
+## PASTE THIS TO START NEXT SESSION
+[The first terminal command to run to continue work]
+
+## OPEN BUGS TO FIX
+[Any known issues from the context]"""
+
+    result = await _ask_doctor(prompt, timeout=120.0)
+    path = _save_draft("session_summary", result)
+
+    return f"""📊 DOCTORBOT SESSION SUMMARY
+Draft saved: {path}
+
+{result[:1000]}...
+
+---
+NEXT STEP: Paste this summary to Claude at the start of your next session."""
+
+
+def list_drafts() -> str:
+    """List all drafts in the drafts folder."""
+    import os, glob
+    from datetime import datetime
+    drafts = sorted(glob.glob(f"{DRAFTS_DIR}/*.md"), reverse=True)
+    if not drafts:
+        return "No drafts yet. Try: draft improvement main.py"
+    lines = [f"📋 DRAFTS ({len(drafts)} files):"]
+    for d in drafts[:10]:
+        size = os.path.getsize(d)
+        name = os.path.basename(d)
+        lines.append(f"  {name} ({size} bytes)")
+    lines.append(f"\nTo read a draft: cat {DRAFTS_DIR}/[filename]")
+    lines.append(f"To send to Claude: copy the full output of cat [filename]")
+    return "\n".join(lines)
