@@ -225,3 +225,5 @@
 ### Apr 27, 2026 @ 06:39 PM — doctorbot_vision.py deployed: Doctorbot can screenshot screen, read errors with Gemini Vision, generate fixes, compile test, and push to GitHub. Commands: see and fix, see and fix [file], fix all, write [prompt], apply [draft] to [file], push fix, github diff, screenshot
 
 ### Apr 27, 2026 @ 06:42 PM — SESSION COMPLETE Apr 27: doctorbot_vision.py full pipeline deployed. Commands: see and fix, see and fix [file] push, fix all push, write [prompt], apply [draft] to [file], push fix, github diff, screenshot. pc_control.py deployed. llm_router.py with Gemini 2.5 Flash. 23 bak files cleaned. All systems operational.
+
+### Apr 28, 2026 @ 06:58 AM — Fixed: briefing crypto section now force-injected with real data if Ollama leaves it blank. Total portfolio (~3696) shown. Day P/L icon added.
