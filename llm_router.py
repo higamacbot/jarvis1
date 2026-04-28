@@ -20,19 +20,19 @@ BOT_PROVIDER = {
     "jarvisbot":   "ollama",
     "stockbot":    "ollama",
     "cryptoid":    "ollama",
-    "doctorbot":   "gemini",
-    "robowright":  "gemini",
-    "jamz":        "gemini",
+    "doctorbot":   "ollama",
+    "robowright":  "ollama",
+    "jamz":        "ollama",
     "roundtable":  "ollama",
     "debateroom":  "ollama",
     "shaman":      "ollama",
     "libmom":      "ollama",
     "magadad":     "ollama",
-    "pinkslip":    "gemini",
-    "ultron":      "gemini",
-    "higashop":    "gemini",
+    "pinkslip":    "ollama",
+    "ultron":      "ollama",
+    "higashop":    "ollama",
     "technoid":    "ollama",
-    "teacherbot":  "gemini",
+    "teacherbot":  "ollama",
 }
 
 async def ask_ollama(prompt: str, system: str = "", timeout: float = 120.0) -> str:
@@ -119,7 +119,7 @@ async def ask(
     p = provider or BOT_PROVIDER.get(bot_id, "ollama")
     print(f">> LLM ROUTER: {bot_id} -> {p}")
 
-    if p == "gemini" and GEMINI_KEY:
+    if p == "ollama" and GEMINI_KEY:
         return await ask_gemini(prompt, system, timeout)
     elif p == "openai" and OPENAI_KEY:
         return await ask_openai(prompt, system)
@@ -131,7 +131,7 @@ async def ask(
 def get_provider_status() -> dict:
     return {
         "ollama":    "✅ always available (local free)",
-        "gemini":    "✅ ready (free 1500/day)" if GEMINI_KEY else "❌ add GEMINI_API_KEY to .env",
+        "ollama":    "✅ ready (free 1500/day)" if GEMINI_KEY else "❌ add GEMINI_API_KEY to .env",
         "openai":    "✅ ready" if OPENAI_KEY else "❌ add OPENAI_API_KEY to .env",
         "anthropic": "✅ ready" if ANTHROPIC_KEY else "❌ add ANTHROPIC_API_KEY to .env",
     }
