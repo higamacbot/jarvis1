@@ -109,18 +109,24 @@ async def generate_briefing(time_of_day):
 
     price_str = ", ".join([f"{k}: ${v:,.2f}" for k, v in prices.items()]) if prices else "Unavailable"
 
+    total_portfolio = portfolio.get('equity', 0) + crypto_total + 454.36  # Acorns static
+    day_pl_icon = "📈" if portfolio.get('day_pl', 0) >= 0 else "📉"
+
     prompt = f"""You are J.A.R.V.I.S. generating a {time_of_day.upper()} BRIEFING for Higa House.
-Use ONLY the real data provided below. No invented numbers.
+Use ONLY the real data provided below. No invented numbers. No placeholders.
 
 --- LIVE DATA ---
-STOCKS (Alpaca paper):
-  Equity: ${portfolio.get('equity', 0):,.2f} | Day P/L: {portfolio.get('day_pl', 0):+,.2f} | Buying Power: ${portfolio.get('buying_power', 0):,.2f}
-{pos_lines}
-REAL CRYPTO PORTFOLIO (Total: ${crypto_total:.2f}):
-{crypto_lines}
-  Webull: ${wb_crypto:.2f} | Coinbase: ${cb_total:.2f} | Kraken paper: ${kr_equity:.2f}
+TOTAL PORTFOLIO: ~${total_portfolio:,.2f}
+  Stocks equity: ${portfolio.get('equity', 0):,.2f} | Day P/L: {portfolio.get('day_pl', 0):+,.2f} {day_pl_icon} | Buying Power: ${portfolio.get('buying_power', 0):,.2f}
+  Crypto total: ${crypto_total:.2f} | Acorns: $454.36
 
-LIVE PRICES: {price_str}
+STOCK POSITIONS:
+{pos_lines}
+CRYPTO POSITIONS (use these exact numbers):
+{crypto_lines}
+  Broker breakdown — Webull: ${wb_crypto:.2f} | Coinbase: ${cb_total:.2f} | Kraken: ${kr_equity:.2f}
+
+LIVE CRYPTO PRICES: {price_str}
 SYSTEM: CPU {cpu:.0f}% | RAM {ram_used:.1f}GB/{ram_total:.1f}GB | Disk {disk:.0f}%
 ---
 
@@ -154,6 +160,15 @@ Format the briefing EXACTLY like this. Use the real data above. No placeholders:
         async with httpx.AsyncClient(timeout=90) as h:
             resp = await h.post(OLLAMA_URL, json={"model": MODEL, "prompt": prompt, "stream": False})
             briefing = resp.json().get("response", "Neural link error, sir.")
+
+            # Force inject crypto if Ollama left it blank
+            if "📊 CRYPTO" in briefing and crypto_total > 0:
+                crypto_section = f"""📊 CRYPTO (Total: ${crypto_total:.2f})
+{crypto_lines}
+  Webull: ${wb_crypto:.2f} | Coinbase: ${cb_total:.2f} | Kraken: ${kr_equity:.2f}
+  Live prices — {price_str}"""
+                briefing = briefing.replace("📊 CRYPTO", crypto_section)
+
             print(f"\n{briefing}\n")
             return briefing
     except Exception as e:
