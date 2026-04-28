@@ -229,3 +229,5 @@
 ### Apr 28, 2026 @ 06:58 AM — Fixed: briefing crypto section now force-injected with real data if Ollama leaves it blank. Total portfolio (~3696) shown. Day P/L icon added.
 
 ### Apr 28, 2026 @ 06:59 AM — SESSION COMPLETE Apr 28: llm_router Gemini/Ollama logic fixed (inverted condition). Briefing crypto force-inject added. Roundtable creative requests route to Robowright/Jamz. All bots on Ollama. System fully operational.
+
+### Apr 28, 2026 @ 04:48 PM — Doctorbot draft writer deployed: draft improvement [file], draft feature [desc], draft fix [bug], draft summary, list drafts, cat draft [name]. All drafts saved to drafts/ folder for Claude review.
