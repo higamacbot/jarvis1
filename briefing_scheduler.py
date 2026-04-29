@@ -139,7 +139,7 @@ Format the briefing EXACTLY like this. Use the real data above. No placeholders:
 
 📈 STOCKBOT: [1-3 sentences. Which stocks are up/down, any sell signals, buying power status.]
 
-🪙 CRYPTOID: [Use the REAL CRYPTO PORTFOLIO data above. State total value, which coins are up/down with actual P/L numbers, and give a 1-sentence hold/reduce recommendation. Do NOT say unavailable.]
+📊 CRYPTO: [MANDATORY - use the REAL CRYPTO PORTFOLIO data above. Write: total value, each coin with P/L, hold/reduce call. Example: "BTC $140.07 (+$56.46), ETH $74.31 (-$25.69), SOL $189.61 (-$44.38). Hold BTC, reduce SOL." Do NOT skip this section.]
 
 📰 HEADLINES:
 {headlines}
