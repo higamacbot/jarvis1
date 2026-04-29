@@ -557,6 +557,12 @@ async def house_websocket(websocket: WebSocket):
                 _creative_skip = True
             if bot_id == "jamz" and any(user_msg.lower().startswith(k) for k in ["beat ", "set ", "playlist ", "mashup "]):
                 _creative_skip = True
+            # Roundtable creative requests — route to Robowright
+            _creative_keywords = ["make me a video", "make a video", "make me a youtube", "make a youtube",
+                                   "make me a short", "make a short", "create a video", "film a video",
+                                   "make me a tiktok", "create a tiktok", "make a beat", "make me a beat"]
+            if bot_id == "roundtable" and any(k in user_msg.lower() for k in _creative_keywords):
+                _creative_skip = True
 
             if _creative_skip:
                 reply = await route_message(bot_id, user_msg, ask_ollama)
