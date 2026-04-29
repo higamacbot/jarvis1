@@ -156,8 +156,31 @@ Format the briefing EXACTLY like this. Use the real data above. No placeholders:
 
 {market_note}"""
 
+    # Add code health to briefing
     try:
-        async with httpx.AsyncClient(timeout=90) as h:
+        from bots.doctorbot import scan_for_bugs
+        health = scan_for_bugs()
+        health_line = "✅ All files compile clean." if "All" in health and "clean" in health else f"⚠️ Code issues detected: {health[:100]}"
+    except Exception:
+        health_line = "Code health: unknown"
+
+    # Add a draft idea
+    try:
+        import random
+        draft_ideas = [
+            "💡 Draft idea: wire pinkslip to live sports odds API",
+            "💡 Draft idea: add voice input via Whisper to JARVIS",
+            "💡 Draft idea: deploy Review Dashboard at /review.html",
+            "💡 Draft idea: add weatherbot to HIGA HOUSE",
+            "💡 Draft idea: Etsy API integration for HIGASHOP",
+            "💡 Draft idea: upgrade Python 3.9 → 3.11",
+        ]
+        draft_idea = random.choice(draft_ideas)
+    except Exception:
+        draft_idea = ""
+
+    try:
+        async with httpx.AsyncClient(timeout=180) as h:
             resp = await h.post(OLLAMA_URL, json={"model": MODEL, "prompt": prompt, "stream": False})
             briefing = resp.json().get("response", "Neural link error, sir.")
 
@@ -169,6 +192,10 @@ Format the briefing EXACTLY like this. Use the real data above. No placeholders:
   Live prices — {price_str}"""
                 briefing = briefing.replace("📊 CRYPTO", crypto_section)
 
+            # Append code health and draft idea to briefing
+            briefing += f"\n\n🔧 CODE: {health_line}"
+            if draft_idea:
+                briefing += f"\n{draft_idea}"
             print(f"\n{briefing}\n")
             return briefing
     except Exception as e:

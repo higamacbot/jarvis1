@@ -26,6 +26,7 @@ from bots.router import route_message
 from pipeline_yt_to_bots import run_pipeline_scheduler, run_youtube_pipeline
 from mac_tools import detect_mac_command
 from autonomous_runner import runner, queue_youtube_playlist, queue_channel
+from telegram_bot import poll_telegram, send_telegram
 from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, analyze_ticker, analyze_portfolio
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -282,6 +283,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(fetch_alpaca()),
         asyncio.create_task(orchestrator.background_worker()),
         asyncio.create_task(runner.run()),
+        asyncio.create_task(poll_telegram()),
     ]
     yield
     for t in tasks:
