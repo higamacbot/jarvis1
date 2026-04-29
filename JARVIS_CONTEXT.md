@@ -231,3 +231,5 @@
 ### Apr 28, 2026 @ 06:59 AM — SESSION COMPLETE Apr 28: llm_router Gemini/Ollama logic fixed (inverted condition). Briefing crypto force-inject added. Roundtable creative requests route to Robowright/Jamz. All bots on Ollama. System fully operational.
 
 ### Apr 28, 2026 @ 04:48 PM — Doctorbot draft writer deployed: draft improvement [file], draft feature [desc], draft fix [bug], draft summary, list drafts, cat draft [name]. All drafts saved to drafts/ folder for Claude review.
+
+### Apr 28, 2026 @ 10:09 PM — Telegram bot deployed: poll_telegram() polls every 2s, handles /brief /bots /portfolio /crypto /debate /roundtable /draft /health /help and any freeform message as JARVIS chat. Briefings now include code health status and daily draft idea.
