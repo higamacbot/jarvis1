@@ -235,3 +235,5 @@
 ### Apr 28, 2026 @ 10:09 PM — Telegram bot deployed: poll_telegram() polls every 2s, handles /brief /bots /portfolio /crypto /debate /roundtable /draft /health /help and any freeform message as JARVIS chat. Briefings now include code health status and daily draft idea.
 
 ### Apr 30, 2026 @ 06:57 AM — Telegram fully operational: chat ID 7343414006 saved to .env. poll_telegram() running in main.py lifespan. Two-way chat active - text @higamacbot anything and JARVIS responds. Commands: /brief /portfolio /crypto /bots /debate /roundtable /draft /health /help
+
+### Apr 30, 2026 @ 07:00 AM — Telegram bot merged: combined old jarvis_telegram_bot.py (trading, indicators, YouTube, British wit, briefings) with new HIGA HOUSE commands (/debate /roundtable /draft /bots /health). Single poll_telegram() runs in main.py lifespan.
