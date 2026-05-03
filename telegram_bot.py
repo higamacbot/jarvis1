@@ -143,9 +143,11 @@ JARVIS:"""
     try:
         async with httpx.AsyncClient(timeout=120.0) as h:
             r = await h.post(OLLAMA_URL, json={"model": MODEL, "prompt": prompt, "stream": False})
-            return r.json().get("response", "Neural link error, sir.").strip()
+            result = r.json().get("response", "").strip()
+            return result if result else "Neural link error, sir."
     except Exception as e:
-        return f"Ollama offline: {e}"
+        print(f">> TELEGRAM OLLAMA ERROR: {e}")
+        return "Standing by — Ollama is processing, sir. Try again in a moment."
 
 # ── COMMAND HANDLERS ──────────────────────────────────────────────────────────
 

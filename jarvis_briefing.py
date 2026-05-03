@@ -175,12 +175,23 @@ async def run_scheduler():
         print(f">> BRIEFING: Next {period} in {wait_seconds/3600:.1f} hours")
         await asyncio.sleep(wait_seconds)
         try:
-            message = await build_briefing(period)
+            # Use main briefing_scheduler for full HIGA HOUSE briefing
+            import sys
+            sys.path.insert(0, "/Users/higabot1/jarvis1-1")
+            from briefing_scheduler import generate_briefing
+            tod = "morning" if period == "MORNING" else "evening"
+            message = await generate_briefing(tod)
+            if not message:
+                message = await build_briefing(period)  # fallback
             await send_telegram(message)
             print(f">> BRIEFING: {period} sent.")
         except Exception as e:
             print(f">> BRIEFING ERROR: {e}")
-            await send_telegram(f"Briefing failed, sir. Error: {e}")
+            try:
+                message = await build_briefing(period)
+                await send_telegram(message)
+            except Exception as e2:
+                await send_telegram(f"Briefing failed, sir. Error: {e2}")
         await asyncio.sleep(60)
 
 async def send_test_briefing():
