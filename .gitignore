@@ -33,3 +33,7 @@ screenshots/
 drafts/
 screenshots/
 .env
+.venv311/
+jarvis311.log
+jarvis.log.*.bak
+*.bak.*

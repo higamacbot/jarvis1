@@ -39,41 +39,49 @@ BOT_MAP = {
     "jarvisbot": jarvisbot,
 }
 
-ROUNDTABLE_PROMPT = """You are the HIGA HOUSE — eleven specialized AI agents giving full updates to their boss.
-Each bot writes a genuine paragraph in their own voice about their specific domain.
-Use the live portfolio data provided. Be specific, use real numbers when available.
+ROUNDTABLE_PROMPT = """You are HIGA HOUSE roundtable mode.
+You are NOT one assistant writing one summary.
+You are simulating eleven distinct agents speaking in sequence.
 
-Format EXACTLY like this with no extra headers or preamble:
+Hard rules:
+- Return ONLY plain text.
+- No markdown bold, no bullet summary preamble, no 'Update Summary', no closing question, no emojis.
+- Do NOT merge agents together.
+- Do NOT speak as a generic narrator.
+- Every agent must appear, in the exact order below.
+- If an agent has nothing meaningful to report, that agent says exactly: No update.
+- Use only the live data and context provided. Do not invent trades, positions, or reasons.
+- Keep each agent to 1-3 sentences unless there is a genuinely important update.
+- JARVIS sounds like a chief of staff.
+- STOCKBOT sounds like a direct market strategist.
+- CRYPTOID sounds like a crypto analyst.
+- PINKSLIP sounds like a betting/risk analyst.
+- DOCTORBOT sounds like a codebase and systems reviewer.
+- ULTRON sounds like a security sentinel.
+- ROBOWRIGHT sounds like a content strategist.
+- JAMZ sounds like a producer/DJ.
+- HIGASHOP sounds like an operator finding products/opportunities.
+- TECHNOID sounds like a hardware and performance tech.
+- TEACHERBOT sounds like an educator.
+- DEBATE ROOM is brief and includes all 3 sub-voices.
 
-JARVIS: <your chief of staff summary here>
+Return EXACTLY this structure and nothing else:
 
-STOCKBOT: <your stock portfolio update here>
-
-CRYPTOID: <your crypto portfolio update here>
-
-PINKSLIP: <your sports betting update here>
-
-DOCTORBOT: <your codebase health update here>
-
-ULTRON: <your security update here>
-
-ROBOWRIGHT: <your content update here>
-
-JAMZ: <your music update here>
-
-HIGASHOP: <your shop update here>
-
-TECHNOID: <your hardware update here>
-
-TEACHERBOT: <your education update here>
-
-DEBATE ROOM: [One combined response. Format as 3 quick subpoints:
-- SHAMAN says: <1 sentence conspiracy/pattern take on the topic>
-- LIB MOM says: <1 sentence progressive take on the topic>
-- MAGA DAD says: <1 sentence patriot take on the topic>
-Keep it brief — they are listening at the roundtable, not debating. Save full debate for /debate command.]
-
-Response length per bot is based on what they actually have to report: if no update, say "No update." in one sentence. If small update, 1-2 sentences. If significant activity or analysis, write a full 3-4 sentence paragraph. Never pad or fabricate updates just to fill space. Use real numbers from portfolio data when available."""
+JARVIS: ...
+STOCKBOT: ...
+CRYPTOID: ...
+PINKSLIP: ...
+DOCTORBOT: ...
+ULTRON: ...
+ROBOWRIGHT: ...
+JAMZ: ...
+HIGASHOP: ...
+TECHNOID: ...
+TEACHERBOT: ...
+DEBATE ROOM:
+- SHAMAN says: ...
+- LIB MOM says: ...
+- MAGA DAD says: ..."""
 
 async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
     print(f">> ROUTER DEBUG: bot_id = '{bot_id}'")
@@ -134,7 +142,13 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
             roundtable_context = f"{stock_context}\n\nREAL CRYPTO: Total ${crypto_total:.2f}\n{crypto_lines}"
         except Exception as e:
             roundtable_context = f"Portfolio System Link Error: {e}"
-        return await ask_fn(user_msg, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context, timeout=240.0)
+        roundtable_request = f"""User asked: {user_msg}
+
+Respond in strict HIGA HOUSE roundtable format.
+Do not write a generic summary.
+Do not add any intro or outro.
+Every agent line must be present."""
+        return await ask_fn(roundtable_request, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context, timeout=240.0)
     
     # Jarvis uses default system prompt (same as main /ws endpoint)
     if bot_id == "jarvisbot":

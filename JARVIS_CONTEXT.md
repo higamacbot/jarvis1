@@ -245,3 +245,5 @@
 ### May 03, 2026 @ 11:46 PM — SESSION May 3: jarvis_briefing.py fixed to use generate_briefing(). Telegram Ollama error improved. LaunchAgent updated with proper env loading. JARVIS_CONTEXT.md header updated - repo IS on GitHub. 15 bots online.
 
 ### May 03, 2026 @ 11:56 PM — SESSION May 3: Fixed Stockbot startup crash by lazy-loading Alpaca TradingClient instead of creating it at import time. Replaced sys.path.append with sys.path.insert. LaunchAgent startup now succeeds and /api/bots/status reports 15 bots online.
+
+### May 04, 2026 @ 12:08 AM — SESSION May 4: Migrated JARVIS runtime to Python 3.11 venv at /Users/higabot1/jarvis1-1/.venv311. Installed missing Google API and yfinance dependencies. LaunchAgent now starts via .venv311 and HIGA HOUSE is back online with 15 bots. Note: websockets 16.0 currently conflicts on paper with alpaca-trade-api 3.2.0 and should be reviewed in a follow-up pass.
