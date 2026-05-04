@@ -67,8 +67,8 @@
 
 ## GitHub
     Repo: https://github.com/higamacbot/jarvis1
-    Note: GitHub has jarvis1 (old single-agent). jarvis1-1 is the live multi-agent version.
-    jarvis1-1 has NOT been pushed to GitHub yet — back it up!
+    Repo: higamacbot/jarvis1 — jarvis1-1 IS live on GitHub (main branch)
+    All commits pushed. Auto-starts on login via LaunchAgent.
 
 ## ─── TIMELINE / MISTAKE LOG ─────────────────────────────────────────────────
 
@@ -241,3 +241,5 @@
 ### May 02, 2026 @ 05:42 PM — Telegram bot merged: combined old jarvis_telegram_bot.py (trading, indicators, YouTube, British wit, briefings) with new HIGA HOUSE commands (/debate /roundtable /draft /bots /health). Single poll_telegram() runs in main.py lifespan.
 
 ### May 03, 2026 @ 02:22 PM — Fixed: jarvis_briefing.py scheduled briefings now call generate_briefing() from briefing_scheduler.py - shows real crypto portfolio instead of blank. Telegram Ollama offline message improved.
+
+### May 03, 2026 @ 11:46 PM — SESSION May 3: jarvis_briefing.py fixed to use generate_briefing(). Telegram Ollama error improved. LaunchAgent updated with proper env loading. JARVIS_CONTEXT.md header updated - repo IS on GitHub. 15 bots online.
