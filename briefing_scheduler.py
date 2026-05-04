@@ -12,7 +12,11 @@ ALPACA_SECRET = os.getenv("ALPACA_SECRET")
 OLLAMA_URL    = "http://localhost:11434/api/generate"
 MODEL         = "qwen3:8b"
 
-client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
+def get_alpaca_client():
+    """Lazy-load Alpaca client so import never crashes startup."""
+    if not ALPACA_KEY or not ALPACA_SECRET:
+        return None
+    return TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 
 async def get_crypto_prices():
     try:
@@ -27,8 +31,8 @@ async def get_crypto_prices():
 
 async def get_alpaca_portfolio():
     try:
-        acct = client.get_account()
-        pos  = client.get_all_positions()
+        acct = get_alpaca_client().get_account()
+        pos  = get_alpaca_client().get_all_positions()
         return {
             "equity":       float(acct.equity),
             "buying_power": float(acct.buying_power),

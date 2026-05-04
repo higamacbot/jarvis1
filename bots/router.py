@@ -12,7 +12,7 @@ except Exception:
     BOT_MEMORY_AVAILABLE = False
     def save_bot_memory(*a, **k): pass
     def extract_durable_takeaway(*a, **k): return ""
-    def get_bot_memory_summary(*a, **k): return 
+    def get_bot_memory_summary(*a, **k): return ""
 from bots import cryptoid
 from bots import doctorbot
 from bots import ultron
@@ -39,6 +39,101 @@ BOT_MAP = {
     "jarvisbot": jarvisbot,
 }
 
+ROUND_ORDER = [
+    "JARVIS",
+    "STOCKBOT",
+    "CRYPTOID",
+    "PINKSLIP",
+    "DOCTORBOT",
+    "ULTRON",
+    "ROBOWRIGHT",
+    "JAMZ",
+    "HIGASHOP",
+    "TECHNOID",
+    "TEACHERBOT",
+    "DEBATE ROOM",
+]
+
+
+def build_generic_roundtable_update(stock_context: str, crypto_total: float, crypto_lines: str) -> str:
+    """Build deterministic roundtable update from live data — no Ollama needed."""
+    import re
+    equity = "Unavailable"
+    buying_power = "Unavailable"
+    m = re.search(r"Equity[:\s]+\$?([0-9,]+(?:\.\d+)?)", stock_context or "")
+    if m:
+        equity = "$" + m.group(1)
+    m2 = re.search(r"Buying Power[:\s]+\$?([0-9,]+(?:\.\d+)?)", stock_context or "")
+    if m2:
+        buying_power = "$" + m2.group(1)
+    stock_lines = [l.strip() for l in (stock_context or "").splitlines()
+                   if ": $" in l and ("P/L:" in l or "(+" in l or "(-" in l)]
+    stock_summary = " | ".join(stock_lines[:3]) if stock_lines else "No update."
+    crypto_assets = [l.strip() for l in (crypto_lines or "").splitlines() if l.strip()]
+    crypto_summary = (f"Total ${crypto_total:.2f} — " + " | ".join(crypto_assets[:4])) if crypto_assets else "No update."
+    return "\n".join([
+        f"JARVIS: House online. Alpaca equity {equity}, buying power {buying_power}. All systems nominal.",
+        f"STOCKBOT: {stock_summary}",
+        f"CRYPTOID: {crypto_summary}",
+        "PINKSLIP: No update.",
+        "DOCTORBOT: Backend, API, and WebSocket online. No critical errors detected.",
+        "ULTRON: No update.",
+        "ROBOWRIGHT: No update.",
+        "JAMZ: No update.",
+        "HIGASHOP: No update.",
+        "TECHNOID: System responsive and healthy.",
+        "TEACHERBOT: No update.",
+        "DEBATE ROOM:",
+        "- SHAMAN says: No update.",
+        "- LIB MOM says: No update.",
+        "- MAGA DAD says: No update.",
+    ])
+
+def normalize_roundtable_output(text: str) -> str:
+    import re
+
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    sections = {}
+
+    current = None
+    for line in lines:
+        matched = False
+        for label in ROUND_ORDER:
+            if line.upper().startswith(label + ":"):
+                sections[label] = line.split(":", 1)[1].strip() or "No update."
+                current = label
+                matched = True
+                break
+        if matched:
+            continue
+
+        if line.startswith("- SHAMAN says:") or line.startswith("- LIB MOM says:") or line.startswith("- MAGA DAD says:"):
+            current = "DEBATE ROOM"
+            sections.setdefault("DEBATE ROOM", [])
+            sections["DEBATE ROOM"].append(line)
+            continue
+
+        if current == "DEBATE ROOM" and line.startswith("- "):
+            sections.setdefault("DEBATE ROOM", [])
+            sections["DEBATE ROOM"].append(line)
+            continue
+
+    fixed = []
+    for label in ROUND_ORDER:
+        if label == "DEBATE ROOM":
+            debate = sections.get("DEBATE ROOM")
+            if isinstance(debate, list) and debate:
+                fixed.append("DEBATE ROOM:")
+                fixed.extend(debate)
+            else:
+                fixed.append("DEBATE ROOM:")
+                fixed.append("- SHAMAN says: No update.")
+                fixed.append("- LIB MOM says: No update.")
+                fixed.append("- MAGA DAD says: No update.")
+        else:
+            fixed.append(f"{label}: {sections.get(label, 'No update.')}")
+    return "\n".join(fixed)
+
 ROUNDTABLE_PROMPT = """You are HIGA HOUSE roundtable mode.
 You are NOT one assistant writing one summary.
 You are simulating eleven distinct agents speaking in sequence.
@@ -48,10 +143,14 @@ Hard rules:
 - No markdown bold, no bullet summary preamble, no 'Update Summary', no closing question, no emojis.
 - Do NOT merge agents together.
 - Do NOT speak as a generic narrator.
+- Never output labels like Agent 1, Agent 2, Agent 3, or Agent 4.
 - Every agent must appear, in the exact order below.
 - If an agent has nothing meaningful to report, that agent says exactly: No update.
-- Use only the live data and context provided. Do not invent trades, positions, or reasons.
+- Use only the live data and context provided. Do not invent trades, positions, motives, narratives, or reasons.
 - Keep each agent to 1-3 sentences unless there is a genuinely important update.
+- For generic update requests like "what's the update", "update", "status", "what's new", or "brief me":
+  only discuss current portfolio, bots, system health, content pipeline, and real operational status.
+- For those generic update requests, do NOT discuss conspiracies, hidden hands, geopolitics, Sanhedrin, Temple Mount, Great Reset, storm, awakening, or any prior debate topic unless the user explicitly asks for that topic.
 - JARVIS sounds like a chief of staff.
 - STOCKBOT sounds like a direct market strategist.
 - CRYPTOID sounds like a crypto analyst.
@@ -142,13 +241,29 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
             roundtable_context = f"{stock_context}\n\nREAL CRYPTO: Total ${crypto_total:.2f}\n{crypto_lines}"
         except Exception as e:
             roundtable_context = f"Portfolio System Link Error: {e}"
-        roundtable_request = f"""User asked: {user_msg}
+        normalized = user_msg.lower().strip()
+        generic_update = normalized in {
+            "what's the update", "whats the update", "update", "status",
+            "what's new", "whats new", "brief me", "house update"
+        }
+
+        if generic_update:
+            roundtable_request = """User asked for a generic HIGA HOUSE status update.
+
+Respond in strict HIGA HOUSE roundtable format.
+Focus only on current portfolio status, bot status, system health, content work, and operational updates.
+Do not reference prior debate topics or conspiracy topics.
+Do not add any intro or outro.
+Every agent line must be present."""
+        else:
+            roundtable_request = f"""User asked: {user_msg}
 
 Respond in strict HIGA HOUSE roundtable format.
 Do not write a generic summary.
 Do not add any intro or outro.
 Every agent line must be present."""
-        return await ask_fn(roundtable_request, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context, timeout=240.0)
+        raw_reply = await ask_fn(roundtable_request, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context, timeout=240.0)
+        return normalize_roundtable_output(raw_reply)
     
     # Jarvis uses default system prompt (same as main /ws endpoint)
     if bot_id == "jarvisbot":

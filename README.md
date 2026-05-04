@@ -55,4 +55,4 @@ bash start.sh
 - `/assign [bot] [task]` — assign task to any bot
 
 ## Stack
-Python 3.9 | FastAPI | Ollama | ChromaDB | SQLite | Alpaca SDK | FPDF2 | yt-dlp
+Python 3.11 | FastAPI | Ollama | ChromaDB | SQLite | Alpaca SDK | FPDF2 | yt-dlp
