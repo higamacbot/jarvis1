@@ -255,3 +255,5 @@
 ### May 04, 2026 @ 04:31 PM — Deployed: silence_warnings.py (boot noise suppressed), obsidian_brain.py (all bots write to /Users/higabot1/jarvis/brain vault), pinkslip_odds.py (the-odds-api.com free tier, needs ODDS_API_KEY), review_dashboard.py + static/review.html (/review.html live). Get odds key at the-odds-api.com.
 
 ### May 04, 2026 @ 04:36 PM — Pinkslip wired to the-odds-api.com free tier. NBA/NFL/MLB/NHL/MMA odds injected into Pinkslip Ollama prompt. Keywords: odds, games, betting, lines, picks, sports, nba, nfl, mlb, nhl, mma. 500 req/month free tier.
+
+### May 04, 2026 @ 04:41 PM — Upgraded: Technoid now injects real psutil CPU/RAM/disk/net/uptime into every response. Ultron fed real scan_for_bugs()+repo_health()+git_status data. Higashop reads higashop_inventory.json for real product tracking. All 3 bots now grounded in real data.
