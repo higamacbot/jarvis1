@@ -270,6 +270,29 @@ Every agent line must be present."""
         return await ask_fn(user_msg)
 
     # Debate room — runs all 3 debate bots and returns colored response
+    # Pinkslip — live odds injection
+    if bot_id == "pinkslip":
+        q = user_msg.lower().strip()
+        if any(k in q for k in ["odds", "games", "betting", "lines", "spread", "moneyline", "picks", "sports", "today", "tonight", "nba", "nfl", "mlb", "nhl", "mma"]):
+            try:
+                from dotenv import load_dotenv
+                load_dotenv(override=True)
+                from pinkslip_odds import get_all_default
+                odds_data = await get_all_default()
+                # Feed odds into Pinkslip's Ollama prompt for analysis
+                from bots import pinkslip
+                analysis_prompt = f"""Here are today's live betting lines:
+
+{odds_data}
+
+User asked: {user_msg}
+
+Give your sharp betting analysis. Flag value bets, recommend unit sizes (1 unit = $25), and confidence %."""
+                return await ask_fn(analysis_prompt, system_override=pinkslip.SYSTEM_PROMPT)
+            except Exception as e:
+                print(f">> PINKSLIP ODDS ERROR: {e}")
+                # Fall through to regular Ollama
+
     if bot_id == "debateroom":
         import httpx
         DEBATE_PERSONAS = {
