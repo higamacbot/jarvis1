@@ -1,3 +1,4 @@
+import silence_warnings  # suppress FutureWarning boot noise
 import asyncio
 import time
 import httpx

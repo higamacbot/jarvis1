@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JARVIS Review Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{color-scheme:dark}
+  body{font-family:-apple-system,ui-monospace,monospace;background:#0b0d10;color:#d6e0ea;margin:0;padding:24px}
+  h1{font-size:18px;letter-spacing:.12em;color:#7ee0c1;margin:0 0 16px}
+  h2{font-size:13px;letter-spacing:.15em;color:#9aa7b4;border-bottom:1px solid #1a2230;padding-bottom:6px;margin-top:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+  .card{background:#11161c;border:1px solid #1d2733;border-radius:8px;padding:12px}
+  .card .meta{font-size:11px;color:#6b7785;margin-bottom:6px;display:flex;justify-content:space-between}
+  .card pre{white-space:pre-wrap;word-break:break-word;font-size:12px;color:#c8d4e0;margin:0;max-height:180px;overflow:auto}
+  .pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px}
+  .pending{background:#3a2a05;color:#f6c66f}.done{background:#0e2f22;color:#7ee0c1}.error{background:#3a0d0d;color:#ff8a8a}
+  button{background:#1f6feb;color:white;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
+  .row{display:flex;gap:8px;align-items:center}
+</style>
+</head>
+<body>
+<div class="row" style="justify-content:space-between">
+  <h1>◢ JARVIS REVIEW DASHBOARD</h1>
+  <button onclick="loadAll()">↻ refresh</button>
+</div>
+<div id="status" style="font-size:11px;color:#6b7785"></div>
+<h2>QUEUE — PENDING</h2><div id="pending" class="grid"></div>
+<h2>QUEUE — RECENT</h2><div id="recent" class="grid"></div>
+<h2>DRAFTS</h2><div id="drafts" class="grid"></div>
+<script>
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function render(id,items,cls){
+  const el=document.getElementById(id);
+  if(!items.length){el.innerHTML='<div style="color:#6b7785;font-size:12px">empty</div>';return}
+  el.innerHTML=items.map(it=>`<div class="card"><div class="meta"><span class="pill ${cls}">${esc(it.status||cls)}</span><span>${esc(it.created||it.timestamp||'')}</span></div><div style="font-weight:600;color:#e6edf3;margin-bottom:4px">${esc(it.job_type||it.title||'task')}</div><pre>${esc(JSON.stringify(it,null,2))}</pre></div>`).join('')
+}
+function renderDrafts(items){
+  const el=document.getElementById('drafts');
+  if(!items.length){el.innerHTML='<div style="color:#6b7785;font-size:12px">no drafts</div>';return}
+  el.innerHTML=items.map(it=>`<div class="card"><div class="meta"><span>${esc(it.name)}</span><span>${it.size}b</span></div><pre>${esc(it.preview)}</pre></div>`).join('')
+}
+async function loadAll(){
+  document.getElementById('status').textContent='loading…';
+  try{
+    const[q,d]=await Promise.all([fetch('/api/review/queue').then(r=>r.json()),fetch('/api/review/drafts').then(r=>r.json())]);
+    render('pending',q.pending||[],'pending');render('recent',q.recent||[],'done');renderDrafts(d.drafts||[]);
+    document.getElementById('status').textContent=`${(q.pending||[]).length} pending · ${(q.recent||[]).length} recent · ${(d.drafts||[]).length} drafts · ${new Date().toLocaleTimeString()}`;
+  }catch(e){document.getElementById('status').textContent='error: '+e.message}
+}
+loadAll();setInterval(loadAll,15000);
+</script>
+</body>
+</html>
