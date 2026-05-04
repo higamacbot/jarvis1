@@ -253,3 +253,5 @@
 ### May 04, 2026 @ 04:28 PM — Deployed: silence_warnings.py (boot noise gone), obsidian_brain.py (all 11 bots can write Obsidian notes), pinkslip_odds.py (live sports odds free tier), review_dashboard.py (/review.html + /api/review/*). Wire pinkslip to odds next.
 
 ### May 04, 2026 @ 04:31 PM — Deployed: silence_warnings.py (boot noise suppressed), obsidian_brain.py (all bots write to /Users/higabot1/jarvis/brain vault), pinkslip_odds.py (the-odds-api.com free tier, needs ODDS_API_KEY), review_dashboard.py + static/review.html (/review.html live). Get odds key at the-odds-api.com.
+
+### May 04, 2026 @ 04:36 PM — Pinkslip wired to the-odds-api.com free tier. NBA/NFL/MLB/NHL/MMA odds injected into Pinkslip Ollama prompt. Keywords: odds, games, betting, lines, picks, sports, nba, nfl, mlb, nhl, mma. 500 req/month free tier.
