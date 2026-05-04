@@ -243,3 +243,5 @@
 ### May 03, 2026 @ 02:22 PM — Fixed: jarvis_briefing.py scheduled briefings now call generate_briefing() from briefing_scheduler.py - shows real crypto portfolio instead of blank. Telegram Ollama offline message improved.
 
 ### May 03, 2026 @ 11:46 PM — SESSION May 3: jarvis_briefing.py fixed to use generate_briefing(). Telegram Ollama error improved. LaunchAgent updated with proper env loading. JARVIS_CONTEXT.md header updated - repo IS on GitHub. 15 bots online.
+
+### May 03, 2026 @ 11:56 PM — SESSION May 3: Fixed Stockbot startup crash by lazy-loading Alpaca TradingClient instead of creating it at import time. Replaced sys.path.append with sys.path.insert. LaunchAgent startup now succeeds and /api/bots/status reports 15 bots online.

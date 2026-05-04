@@ -33,14 +33,18 @@ ALPACA_SECRET = os.getenv("ALPACA_SECRET")
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "qwen3:8b"
 
-client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
+def get_trading_client():
+    """Create Alpaca client only when needed so startup never crashes."""
+    if not ALPACA_KEY or not ALPACA_SECRET:
+        raise RuntimeError("Missing ALPACA_KEY or ALPACA_SECRET")
+    return TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 
 async def get_portfolio_data():
     """Fetch multi-broker stock portfolio data"""
     try:
         # Import multi-broker portfolio
         import sys
-        sys.path.append('..')
+        sys.path.insert(0, "/Users/higabot1/jarvis1-1")
         from multi_broker_portfolio import MultiBrokerPortfolio
         
         portfolio_tracker = MultiBrokerPortfolio()
@@ -48,8 +52,9 @@ async def get_portfolio_data():
         
         # Get Alpaca paper trading data for comparison
         try:
-            acct = client.get_account()
-            pos = client.get_all_positions()
+            trading_client = get_trading_client()
+            acct = trading_client.get_account()
+            pos = trading_client.get_all_positions()
             alpaca_equity = float(acct.equity)
             alpaca_buying_power = float(acct.buying_power)
         except:
@@ -87,8 +92,9 @@ async def get_portfolio_data():
         print(f">> STOCKBOT PORTFOLIO ERROR: {e}")
         # Fallback to Alpaca only
         try:
-            acct = client.get_account()
-            pos = client.get_all_positions()
+            trading_client = get_trading_client()
+            acct = trading_client.get_account()
+            pos = trading_client.get_all_positions()
             return {
                 "equity": float(acct.equity),
                 "buying_power": float(acct.buying_power),
