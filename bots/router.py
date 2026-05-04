@@ -270,6 +270,81 @@ Every agent line must be present."""
         return await ask_fn(user_msg)
 
     # Debate room — runs all 3 debate bots and returns colored response
+    # Technoid — live system telemetry injection
+    if bot_id == "technoid":
+        try:
+            from bots.technoid import _get_system_stats
+            stats = _get_system_stats()
+            tech_prompt = f"""LIVE SYSTEM DATA: {stats}
+
+User asked: {user_msg}
+
+Respond as Technoid with real numbers from the live data above."""
+            from bots import technoid
+            return await ask_fn(tech_prompt, system_override=technoid.SYSTEM_PROMPT)
+        except Exception as e:
+            print(f">> TECHNOID ERROR: {e}")
+
+    # Ultron — real security/risk feed from Doctorbot
+    if bot_id == "ultron":
+        try:
+            from bots.doctorbot import scan_for_bugs, repo_health
+            bugs = scan_for_bugs()
+            health = repo_health()
+            import subprocess
+            git_status = subprocess.run(
+                ["git", "status", "--short"],
+                cwd="/Users/higabot1/jarvis1-1",
+                capture_output=True, text=True
+            ).stdout.strip() or "clean"
+            ultron_prompt = f"""REAL SECURITY SCAN DATA:
+
+CODE HEALTH:
+{bugs}
+
+REPO STATUS:
+{git_status}
+
+SYSTEM HEALTH:
+{health}
+
+User asked: {user_msg}
+
+Analyze the real data above for security risks, operational threats, and stability issues."""
+            from bots import ultron
+            return await ask_fn(ultron_prompt, system_override=ultron.SYSTEM_PROMPT)
+        except Exception as e:
+            print(f">> ULTRON ERROR: {e}")
+
+    # Higashop — real inventory and opportunity feed
+    if bot_id == "higashop":
+        try:
+            import json, os
+            inventory_path = "/Users/higabot1/jarvis1-1/higashop_inventory.json"
+            if os.path.exists(inventory_path):
+                inv = json.load(open(inventory_path))
+                products = inv.get("products", [])
+                goals = inv.get("goals", [])
+                active = [p for p in products if p["status"] == "active"]
+                ideas = [p for p in products if p["status"] == "idea"]
+                shop_prompt = f"""HIGA SHOP REAL DATA:
+Shop: {inv.get('shop_name')}
+Bankroll: ${inv.get('bankroll', 0):,.2f}
+Active products: {len(active)} — {', '.join(p['name'] for p in active)}
+Ideas pipeline: {len(ideas)} — {', '.join(p['name'] for p in ideas)}
+Goals: {', '.join(goals)}
+
+Full inventory:
+{json.dumps(products, indent=2)}
+
+User asked: {user_msg}
+
+Analyze real inventory, suggest improvements, pricing strategy, or new product ideas."""
+                from bots import higashop
+                return await ask_fn(shop_prompt, system_override=higashop.SYSTEM_PROMPT)
+        except Exception as e:
+            print(f">> HIGASHOP ERROR: {e}")
+
     # Pinkslip — live odds injection
     if bot_id == "pinkslip":
         q = user_msg.lower().strip()

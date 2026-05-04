@@ -1,0 +1,9 @@
+{
+  "shop_name": "HIGA HOUSE Shop",
+  "bankroll": 1000,
+  "products": [
+    {"id": 1, "name": "Sample Product", "price": 25.00, "cost": 10.00, "status": "active", "platform": "etsy", "notes": "Add your real products here"},
+    {"id": 2, "name": "Digital Download", "price": 5.00, "cost": 0.00, "status": "idea", "platform": "etsy", "notes": "Low effort high margin"}
+  ],
+  "goals": ["Launch first product", "Hit $500/month revenue", "Expand to eBay"]
+}
