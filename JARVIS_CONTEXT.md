@@ -251,3 +251,5 @@
 ### May 04, 2026 @ 04:27 PM — Fixed 4 bugs: get_bot_memory_summary stub now returns empty string, briefing_scheduler Alpaca client lazy-loaded, README updated to Python 3.11, build_generic_roundtable_update added for deterministic status updates.
 
 ### May 04, 2026 @ 04:28 PM — Deployed: silence_warnings.py (boot noise gone), obsidian_brain.py (all 11 bots can write Obsidian notes), pinkslip_odds.py (live sports odds free tier), review_dashboard.py (/review.html + /api/review/*). Wire pinkslip to odds next.
+
+### May 04, 2026 @ 04:31 PM — Deployed: silence_warnings.py (boot noise suppressed), obsidian_brain.py (all bots write to /Users/higabot1/jarvis/brain vault), pinkslip_odds.py (the-odds-api.com free tier, needs ODDS_API_KEY), review_dashboard.py + static/review.html (/review.html live). Get odds key at the-odds-api.com.
