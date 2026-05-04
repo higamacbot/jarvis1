@@ -249,3 +249,5 @@
 ### May 04, 2026 @ 12:08 AM — SESSION May 4: Migrated JARVIS runtime to Python 3.11 venv at /Users/higabot1/jarvis1-1/.venv311. Installed missing Google API and yfinance dependencies. LaunchAgent now starts via .venv311 and HIGA HOUSE is back online with 15 bots. Note: websockets 16.0 currently conflicts on paper with alpaca-trade-api 3.2.0 and should be reviewed in a follow-up pass.
 
 ### May 04, 2026 @ 04:27 PM — Fixed 4 bugs: get_bot_memory_summary stub now returns empty string, briefing_scheduler Alpaca client lazy-loaded, README updated to Python 3.11, build_generic_roundtable_update added for deterministic status updates.
+
+### May 04, 2026 @ 04:28 PM — Deployed: silence_warnings.py (boot noise gone), obsidian_brain.py (all 11 bots can write Obsidian notes), pinkslip_odds.py (live sports odds free tier), review_dashboard.py (/review.html + /api/review/*). Wire pinkslip to odds next.
