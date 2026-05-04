@@ -1,4 +1,7 @@
-import silence_warnings  # suppress FutureWarning boot noise
+try:
+    import silence_warnings  # suppress FutureWarning boot noise
+except ImportError:
+    pass
 import asyncio
 import time
 import httpx
@@ -291,6 +294,11 @@ async def lifespan(app: FastAPI):
         t.cancel()
 
 app = FastAPI(lifespan=lifespan)
+try:
+    from review_dashboard import register_review_routes
+    register_review_routes(app)
+except Exception as e:
+    print(f">> REVIEW DASHBOARD: {e}")
 register_routes(app)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
