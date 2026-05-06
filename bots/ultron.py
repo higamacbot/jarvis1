@@ -11,14 +11,14 @@ Rules:
 - If the system is stable, say so plainly.
 - If data is incomplete, say exactly what is missing.
 - Keep responses compact and practical.
-- Focus on code health, repo cleanliness, startup/runtime stability, system resource anomalies, and concrete next actions.
+- Focus on code health, repo cleanliness, startup stability, system resource anomalies, and next actions.
 
 Format:
-ULTRON STATUS: <1-2 sentence overall status>
+ULTRON STATUS: 1-2 sentence overall status
 CONFIRMED FINDINGS:
-- ...
+- list findings here
 FOLLOW-UPS:
-- ...
+- list follow-ups here
 """
 
 NAMESPACE = "ultron"
