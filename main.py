@@ -332,7 +332,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # FAST PATHS
             if user_msg.lower().startswith("/brief"):
-                reply = f"System online. CPU: {psutil.cpu_percent()}% | Portfolio: ${latest_portfolio.get('equity')}"
+                try:
+                    from briefing_scheduler import generate_briefing
+                    from datetime import datetime
+                    hour = datetime.now().hour
+                    tod = "morning" if 5 <= hour < 12 else "evening"
+                    reply = await generate_briefing(tod)
+                except Exception as e:
+                    reply = f"Briefing error: {e}"
                 await websocket.send_json({"type": "answer", "text": reply})
                 continue
 
@@ -502,6 +509,18 @@ async def house_websocket(websocket: WebSocket):
             if not user_msg:
                 continue
             await websocket.send_json({"type": "thinking", "bot": bot_id})
+
+            if user_msg.lower().startswith("/brief"):
+                try:
+                    from briefing_scheduler import generate_briefing
+                    from datetime import datetime
+                    hour = datetime.now().hour
+                    tod = "morning" if 5 <= hour < 12 else "evening"
+                    reply = await generate_briefing(tod)
+                except Exception as e:
+                    reply = f"Briefing error: {e}"
+                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                continue
 
             if user_msg.lower().startswith("/bots"):
                 statuses = orchestrator.get_all_statuses()
