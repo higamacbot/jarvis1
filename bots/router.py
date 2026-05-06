@@ -283,15 +283,19 @@ Respond as Technoid with real numbers from the live data above."""
     if bot_id == "ultron":
         try:
             from bots.doctorbot import scan_for_bugs, repo_health
+            from bots.technoid import _get_system_stats
+            import subprocess
+
             bugs = scan_for_bugs()
             health = repo_health()
-            import subprocess
+            sys_stats = _get_system_stats()
             git_status = subprocess.run(
                 ["git", "status", "--short"],
                 cwd="/Users/higabot1/jarvis1-1",
                 capture_output=True, text=True
             ).stdout.strip() or "clean"
-            ultron_prompt = f"""REAL SECURITY SCAN DATA:
+
+            ultron_prompt = f"""REAL ULTRON INPUT
 
 CODE HEALTH:
 {bugs}
@@ -302,9 +306,14 @@ REPO STATUS:
 SYSTEM HEALTH:
 {health}
 
+LIVE SYSTEM TELEMETRY:
+{sys_stats}
+
 User asked: {user_msg}
 
-Analyze the real data above for security risks, operational threats, and stability issues."""
+Use only the real inputs above.
+Do not speculate beyond the evidence.
+If there are no confirmed threats, say risk is currently low."""
             from bots import ultron
             return await ask_fn(ultron_prompt, system_override=ultron.SYSTEM_PROMPT)
         except Exception as e:
