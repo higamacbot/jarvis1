@@ -248,13 +248,7 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
         }
 
         if generic_update:
-            roundtable_request = """User asked for a generic HIGA HOUSE status update.
-
-Respond in strict HIGA HOUSE roundtable format.
-Focus only on current portfolio status, bot status, system health, content work, and operational updates.
-Do not reference prior debate topics or conspiracy topics.
-Do not add any intro or outro.
-Every agent line must be present."""
+            return build_generic_roundtable_update(stock_context, crypto_total, crypto_lines)
         else:
             roundtable_request = f"""User asked: {user_msg}
 
