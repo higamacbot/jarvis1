@@ -265,3 +265,5 @@
 ### May 06, 2026 @ 06:25 PM — SESSION COMPLETE May 6: /brief working in HIGA HOUSE, roundtable deterministic update fixed, Ultron/Pinkslip/Higashop/Technoid upgraded with real data, and app recovered on Python 3.11 runtime.
 
 ### May 06, 2026 @ 10:36 PM — SESSION COMPLETE May 6: /brief working in HIGA HOUSE, roundtable deterministic update fixed, Ultron/Pinkslip/Higashop/Technoid upgraded with real data, and app recovered on Python 3.11 runtime.
+
+### May 06, 2026 @ 10:49 PM — Teacherbot curriculum tracker deployed: teacherbot_tracker.json + teacherbot_tracker.py. Commands: show my progress, what should i study next, complete lesson [name]. Briefing headlines deduplicated. Draft ideas updated to remove stale items.
