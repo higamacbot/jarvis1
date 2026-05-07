@@ -1,0 +1,15 @@
+{
+  "students": [
+    {
+      "name": "default",
+      "subjects": {
+        "python": {
+          "level": "beginner",
+          "goals": ["functions", "loops", "basic debugging"],
+          "next_lesson": "writing simple functions",
+          "completed": ["variables", "conditionals"]
+        }
+      }
+    }
+  ]
+}

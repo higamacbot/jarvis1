@@ -70,6 +70,36 @@ def get_system_stats():
     disk = psutil.disk_usage('/')
     return cpu, ram.used / (1024**3), ram.total / (1024**3), disk.percent
 
+
+def _normalize_headline(text: str) -> str:
+    import re
+    text = text.lower()
+    text = re.sub(r'^[0-9]+\.\s*', '', text)
+    text = re.sub(r'^[a-z]+:\s*', '', text)
+    text = re.sub(r'[^a-z0-9\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+def _dedupe_headline_lines(lines, limit=5):
+    seen = set()
+    out = []
+    for line in lines:
+        key = _normalize_headline(line)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(line)
+        if len(out) >= limit:
+            break
+    return out
+
+def _build_clean_crypto_block(crypto_total, crypto_lines, wb_crypto, cb_total, kr_equity):
+    coin_lines = [line.rstrip() for line in (crypto_lines or "").splitlines() if line.strip()]
+    block = [f"CRYPTO (Total: ${crypto_total:.2f})"]
+    block.extend(coin_lines)
+    block.append(f"Broker: Webull ${wb_crypto:.2f} | Coinbase ${cb_total:.2f} | Kraken ${kr_equity:.2f}")
+    return "\n".join(block)
+
 async def fetch_headlines(n=5) -> str:
     """Scrape real headlines from AP and BBC."""
     try:
@@ -82,13 +112,13 @@ async def fetch_headlines(n=5) -> str:
         for src in sources:
             try:
                 url, text = await asyncio.to_thread(fetch_source_context, src["url"])
-                # Extract first few lines as headlines
                 lines = [l.strip() for l in text.split("\n") if len(l.strip()) > 30][:3]
                 for line in lines:
                     headlines.append(f"{src['name']}: {line[:100]}")
             except Exception:
                 pass
-        return "\n".join([f"{i+1}. {h}" for i, h in enumerate(headlines[:n])])
+        unique = _dedupe_headline_lines(headlines, n)
+        return "\n".join([f"{i+1}. {h}" for i, h in enumerate(unique)])
     except Exception as e:
         return f"Headlines unavailable: {e}"
 
@@ -172,12 +202,12 @@ Format the briefing EXACTLY like this. Use the real data above. No placeholders:
     try:
         import random
         draft_ideas = [
-            "💡 Draft idea: wire pinkslip to live sports odds API",
+            "💡 Draft idea: wire Teacherbot to full curriculum tracker",
             "💡 Draft idea: add voice input via Whisper to JARVIS",
-            "💡 Draft idea: deploy Review Dashboard at /review.html",
             "💡 Draft idea: add weatherbot to HIGA HOUSE",
             "💡 Draft idea: Etsy API integration for HIGASHOP",
-            "💡 Draft idea: upgrade Python 3.9 → 3.11",
+            "💡 Draft idea: add PINKSLIP to 5AM briefing with top picks",
+            "💡 Draft idea: wire all bots to Obsidian daily log",
         ]
         draft_idea = random.choice(draft_ideas)
     except Exception:

@@ -371,6 +371,22 @@ Give your sharp betting analysis. Flag value bets, recommend unit sizes (1 unit 
                 print(f">> PINKSLIP ODDS ERROR: {e}")
                 # Fall through to regular Ollama
 
+    if bot_id == "teacherbot":
+        q = user_msg.lower().strip()
+        try:
+            from teacherbot_tracker import progress_summary, next_lesson_summary, mark_completed, teacher_context
+            if q in ["show my progress", "progress", "my progress"]:
+                return progress_summary()
+            if q in ["what should i study next", "what do i study next", "next lesson", "what's next"]:
+                return next_lesson_summary()
+            if q.startswith("complete lesson "):
+                lesson_name = user_msg[len("complete lesson "):].strip()
+                return mark_completed(lesson_name)
+            extra = teacher_context()
+            return await ask_fn(user_msg, system_override=teacherbot.SYSTEM_PROMPT, extra_context=extra)
+        except Exception as e:
+            return f"Teacherbot tracker error: {e}"
+
     if bot_id == "debateroom":
         import httpx
         DEBATE_PERSONAS = {
