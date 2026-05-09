@@ -471,6 +471,16 @@ Do not mention any inability to access external content."""
 async def serve_house():
     return FileResponse("frontend/house.html")
 
+def _try_obsidian_daily_log(bot_id: str, user_msg: str, reply: str):
+    try:
+        from obsidian_brain import daily_log
+        bot_name = (bot_id or "jarvisbot").lower()
+        safe_q = (user_msg or "").replace("\n", " ").strip()[:80]
+        safe_a = (reply or "").replace("\n", " ").strip()[:120]
+        daily_log(bot_name, f"Q: {safe_q} | A: {safe_a}")
+    except Exception:
+        pass
+
 @app.websocket("/ws/house")
 async def house_websocket(websocket: WebSocket):
     await websocket.accept()
@@ -519,6 +529,7 @@ async def house_websocket(websocket: WebSocket):
                     reply = await generate_briefing(tod)
                 except Exception as e:
                     reply = f"Briefing error: {e}"
+                _try_obsidian_daily_log(bot_id, user_msg, reply)
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
                 continue
 
@@ -702,6 +713,7 @@ Do not mention any inability to access external content."""
 
             reply = await route_message(bot_id, user_msg, ask_ollama)
             memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+            _try_obsidian_daily_log(bot_id, user_msg, reply)
             await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
     except WebSocketDisconnect:
         print(">> HIGA HOUSE: Client disconnected.")

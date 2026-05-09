@@ -211,36 +211,22 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
             return f"JAMZ\n{result}\n\n---\n{launch_msg}"
 
     if bot_id == "roundtable":
-        import httpx
-        from multi_broker_portfolio import MultiBrokerPortfolio
-
-        # Inject real portfolio data into roundtable context
         try:
-            tracker = MultiBrokerPortfolio()
-            all_crypto = tracker.get_all_crypto() or {}
-            
-            # Context-Safe Summing (Handles Dicts vs Floats correctly)
-            crypto_total = 0
-            for v in all_crypto.values():
-                if isinstance(v, dict): crypto_total += v.get('value', 0)
-                elif isinstance(v, (int, float)): crypto_total += v
+            from jarvis_state import get_state, format_portfolio_context, format_crypto_context, format_system_context
 
-            crypto_lines = "\n".join([f"  {s}: ${d.get('value',0):.2f}" for s, d in all_crypto.items() if isinstance(d, dict)])
-            # Also fetch Alpaca stock positions
-            try:
-                import os
-                from alpaca.trading.client import TradingClient
-                ac = TradingClient(os.getenv("ALPACA_KEY"), os.getenv("ALPACA_SECRET"), paper=True)
-                acct = ac.get_account()
-                pos = ac.get_all_positions()
-                stock_lines = "\n".join([f"  {p.symbol}: ${float(p.market_value):,.2f} (P/L: {float(p.unrealized_pl):+,.2f})" for p in pos])
-                stock_context = f"STOCKS (Alpaca paper):\n  Equity: ${float(acct.equity):,.2f} | Buying Power: ${float(acct.buying_power):,.2f}\n{stock_lines}"
-            except Exception as e:
-                stock_context = f"STOCKS: unavailable ({e})"
-
-            roundtable_context = f"{stock_context}\n\nREAL CRYPTO: Total ${crypto_total:.2f}\n{crypto_lines}"
+            state = await get_state()
+            stock_context = format_portfolio_context(state)
+            crypto = state.get("crypto", {})
+            crypto_total = crypto.get("total", 0)
+            crypto_lines = crypto.get("lines", "")
+            system_context = format_system_context(state)
+            roundtable_context = f"{stock_context}\n\n{format_crypto_context(state)}\n\n{system_context}"
         except Exception as e:
-            roundtable_context = f"Portfolio System Link Error: {e}"
+            stock_context = f"STOCKS: unavailable ({e})"
+            crypto_total = 0
+            crypto_lines = ""
+            roundtable_context = f"State bus unavailable: {e}"
+
         normalized = user_msg.lower().strip()
         generic_update = normalized in {
             "what's the update", "whats the update", "update", "status",
@@ -258,7 +244,7 @@ Do not add any intro or outro.
 Every agent line must be present."""
         raw_reply = await ask_fn(roundtable_request, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context, timeout=240.0)
         return normalize_roundtable_output(raw_reply)
-    
+
     # Jarvis uses default system prompt (same as main /ws endpoint)
     if bot_id == "jarvisbot":
         return await ask_fn(user_msg)
