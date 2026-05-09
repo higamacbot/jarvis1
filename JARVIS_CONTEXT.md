@@ -267,3 +267,5 @@
 ### May 06, 2026 @ 10:36 PM — SESSION COMPLETE May 6: /brief working in HIGA HOUSE, roundtable deterministic update fixed, Ultron/Pinkslip/Higashop/Technoid upgraded with real data, and app recovered on Python 3.11 runtime.
 
 ### May 06, 2026 @ 10:49 PM — Teacherbot curriculum tracker deployed: teacherbot_tracker.json + teacherbot_tracker.py. Commands: show my progress, what should i study next, complete lesson [name]. Briefing headlines deduplicated. Draft ideas updated to remove stale items.
+
+### May 09, 2026 @ 06:02 PM — jarvis_state.py deployed: shared state bus caches portfolio/crypto/system/repo/jobs every 60s. Roundtable now reads from state bus. All bots can import get_state() instead of fetching independently. format_portfolio_context(), format_crypto_context(), format_system_context() available.
