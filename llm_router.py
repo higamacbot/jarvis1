@@ -131,7 +131,7 @@ async def ask(
 def get_provider_status() -> dict:
     return {
         "ollama":    "✅ always available (local free)",
-        "ollama":    "✅ ready (free 1500/day)" if GEMINI_KEY else "❌ add GEMINI_API_KEY to .env",
+        "gemini":    "✅ ready (free 1500/day)" if GEMINI_KEY else "❌ add GEMINI_API_KEY to .env",
         "openai":    "✅ ready" if OPENAI_KEY else "❌ add OPENAI_API_KEY to .env",
         "anthropic": "✅ ready" if ANTHROPIC_KEY else "❌ add ANTHROPIC_API_KEY to .env",
     }
