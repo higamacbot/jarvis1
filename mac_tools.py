@@ -244,6 +244,8 @@ def create_imovie_script_package(title: str, script: str, output_dir: str = None
     Creates: script.md, shot_list.md, sora_prompts.md, prompts.json, and media folders.
     """
     import os
+    import re
+    import json
     import glob
     from datetime import datetime
     from bots.robowright_assets import build_shot_prompts, write_sora_prompts_markdown, write_prompts_json
@@ -252,17 +254,21 @@ def create_imovie_script_package(title: str, script: str, output_dir: str = None
         output_dir = os.path.expanduser("~/Movies/HIGA HOUSE Productions")
     os.makedirs(output_dir, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    safe_title = title.replace(" ", "_")[:40]
-    project_dir = os.path.join(output_dir, f"{timestamp}_{safe_title}")
+    safe_title = re.sub(r'[^a-z0-9]+', '_', title.lower().strip()).strip('_')[:40]
+    project_dir = os.path.join(output_dir, safe_title)
+    is_new = not os.path.isdir(project_dir)
     os.makedirs(project_dir, exist_ok=True)
 
     media_dir = os.path.join(project_dir, "media")
     generated_dir = os.path.join(media_dir, "generated")
     source_dir = os.path.join(media_dir, "source")
     os.makedirs(media_dir, exist_ok=True)
-    os.makedirs(generated_dir, exist_ok=True)
     os.makedirs(source_dir, exist_ok=True)
+    # Always wipe and refresh generated/ so stale clips don't accumulate
+    if os.path.isdir(generated_dir):
+        import shutil as _shutil
+        _shutil.rmtree(generated_dir)
+    os.makedirs(generated_dir, exist_ok=True)
 
     with open(os.path.join(media_dir, "DROP_FOOTAGE_HERE.txt"), "w") as f:
         f.write(f"Drop your video clips, screen recordings, and audio here.\n"
@@ -324,14 +330,38 @@ def create_imovie_script_package(title: str, script: str, output_dir: str = None
     except Exception as e:
         print(f">> ROBOWRIGHT: rough cut generation failed: {e}")
 
+    # Update draft registry
+    registry_path = os.path.join(output_dir, "draft_registry.json")
+    try:
+        registry = json.loads(open(registry_path).read()) if os.path.exists(registry_path) else {}
+    except Exception:
+        registry = {}
+    registry[safe_title] = {
+        "title": title,
+        "project_dir": project_dir,
+        "fcpxml_path": fcpxml_path or "",
+        "last_updated": datetime.now().isoformat(),
+    }
+    try:
+        with open(registry_path, "w") as _rf:
+            json.dump(registry, _rf, indent=2)
+    except Exception as e:
+        print(f">> ROBOWRIGHT: registry write failed: {e}")
+
+    draft_label = "new draft" if is_new else "existing draft refreshed"
     subprocess.Popen(["open", project_dir])
     if fcpxml_path:
         subprocess.Popen(["open", "-a", "iMovie", fcpxml_path])
+        try:
+            from bots.imovie_automation import automate_imovie_new_project
+            automate_imovie_new_project(delay_secs=2.5)
+        except Exception as _e:
+            print(f">> ROBOWRIGHT: imovie_automation unavailable: {_e}")
         imovie_note = f"\n  project.fcpxml ({len(clip_paths)} clips in timeline)"
     else:
         subprocess.Popen(["open", "-a", "iMovie"])
         imovie_note = ""
 
-    return (f"iMovie opening with rough cut timeline. Production folder:\n{project_dir}\n\n"
+    return (f"iMovie opening with rough cut timeline ({draft_label}).\nProduction folder:\n{project_dir}\n\n"
             f"Files:\n  script.md\n  shot_list.md\n  sora_prompts.md\n  prompts.json\n  media/generated/\n  media/source/{beat_note}{asset_note}{imovie_note}\n\n"
             f"Press play in iMovie to preview the rough cut.")

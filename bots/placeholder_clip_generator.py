@@ -48,24 +48,46 @@ def _make_png(shot: Dict, png_path: str) -> None:
 
 def generate_placeholder_clips(prompts: List[Dict], generated_dir: str) -> List[str]:
     """
-    Render one colored title-card .mp4 per shot into generated_dir.
-    Uses Pillow for the card image, ffmpeg to encode it as video.
+    Render one .mp4 per shot into generated_dir.
+    Tries real image generation first (via bots.image_provider); falls back to
+    the Pillow title-card if generation is unavailable or fails.
     Returns absolute paths to successfully created .mp4 files in shot order.
     """
     os.makedirs(generated_dir, exist_ok=True)
+
+    try:
+        from bots.image_provider import generate_shot_image
+    except Exception:
+        generate_shot_image = None
+
     clip_paths = []
 
     for shot in prompts:
         num = shot["shot"]
-        png_path = os.path.join(generated_dir, f"shot_{num:02d}_card.png")
         mp4_path = os.path.join(generated_dir, f"shot_{num:02d}.mp4")
         duration = max(1, shot.get("duration_sec", 3))
 
-        try:
-            _make_png(shot, png_path)
-        except Exception as e:
-            print(f">> ROBOWRIGHT: card render failed for shot {num}: {e}")
-            continue
+        # Attempt real image generation
+        png_path = None
+        if generate_shot_image:
+            try:
+                png_path = generate_shot_image(
+                    shot.get("image_prompt", shot.get("visual", f"shot {num}")),
+                    num,
+                    generated_dir,
+                )
+            except Exception as e:
+                print(f">> ROBOWRIGHT: image_provider error for shot {num}: {e}")
+
+        # Fall back to Pillow title card
+        if not png_path:
+            card_path = os.path.join(generated_dir, f"shot_{num:02d}_card.png")
+            try:
+                _make_png(shot, card_path)
+                png_path = card_path
+            except Exception as e:
+                print(f">> ROBOWRIGHT: card render failed for shot {num}: {e}")
+                continue
 
         r = subprocess.run(
             [FFMPEG, "-y", "-loop", "1", "-i", png_path,
