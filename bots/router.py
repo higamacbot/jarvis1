@@ -722,14 +722,24 @@ Broker Breakdown:
     # Robowright commands
     if bot_id == "robowright":
         q = user_msg.lower().strip()
-        if q.startswith("pitch "):
+        _FORCE_PREFIXES = ("new project: ", "fresh cut: ")
+        if any(q.startswith(p) for p in _FORCE_PREFIXES):
+            prefix_len = next(len(p) for p in _FORCE_PREFIXES if q.startswith(p))
+            topic = user_msg[prefix_len:].strip()
+            from bots.robowright_media import pitch_video_concept, save_script
+            result = await pitch_video_concept(topic)
+            save_script(topic, result)
+            from mac_tools import create_imovie_script_package
+            launch_msg = create_imovie_script_package(topic, result, force_new=True)
+            return result + f"\n\n---\n{launch_msg}"
+        elif q.startswith("pitch "):
             topic = user_msg[6:].strip()
             from bots.robowright_media import pitch_video_concept, save_script
             result = await pitch_video_concept(topic)
             save_script(topic, result)
             from mac_tools import create_imovie_script_package
             launch_msg = create_imovie_script_package(topic, result)
-            return result + f"\n\n---\n{launch_msg}" 
+            return result + f"\n\n---\n{launch_msg}"
         elif q.startswith("batch "):
             theme = user_msg[6:].strip()
             from bots.robowright_media import batch_content_plan

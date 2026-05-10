@@ -238,7 +238,8 @@ NEXT STEPS:
 
     return f"{action}\n\nBPM: {bpm} | Key: {key}\nMIDI: {midi_path or 'unavailable'}\nSetup note: {note_path}"
 
-def create_imovie_script_package(title: str, script: str, output_dir: str = None) -> str:
+def create_imovie_script_package(title: str, script: str, output_dir: str = None,
+                                  force_new: bool = False) -> str:
     """
     Save a video script as a production package, reveal it in Finder, and open iMovie.
     Creates: script.md, shot_list.md, sora_prompts.md, prompts.json, and media folders.
@@ -255,6 +256,8 @@ def create_imovie_script_package(title: str, script: str, output_dir: str = None
     os.makedirs(output_dir, exist_ok=True)
 
     safe_title = re.sub(r'[^a-z0-9]+', '_', title.lower().strip()).strip('_')[:40]
+    if force_new:
+        safe_title = datetime.now().strftime("%Y%m%d_%H%M") + "_" + safe_title[:32]
     project_dir = os.path.join(output_dir, safe_title)
     is_new = not os.path.isdir(project_dir)
     os.makedirs(project_dir, exist_ok=True)
@@ -278,13 +281,14 @@ def create_imovie_script_package(title: str, script: str, output_dir: str = None
     beats_dir = os.path.expanduser("~/jarvis1-1/beats")
     recent_beats = sorted(glob.glob(os.path.join(beats_dir, "*.mid")), reverse=True)
     beat_note = ""
+    beat_src = None
     if recent_beats:
         import shutil
         beat_src = recent_beats[0]
         beat_dst = os.path.join(source_dir, os.path.basename(beat_src))
         try:
             shutil.copy2(beat_src, beat_dst)
-            beat_note = f"\n  🎵 Latest JAMZ beat copied: {os.path.basename(beat_src)}"
+            beat_note = f"\n  Latest JAMZ beat copied: {os.path.basename(beat_src)}"
         except Exception:
             pass
 
@@ -321,12 +325,33 @@ def create_imovie_script_package(title: str, script: str, output_dir: str = None
 
     clip_paths = []
     fcpxml_path = None
+    audio_note = ""
     try:
         from bots.placeholder_clip_generator import generate_placeholder_clips
         from bots.fcpxml_generator import generate_fcpxml
         clip_paths = generate_placeholder_clips(prompts, generated_dir)
         if clip_paths:
-            fcpxml_path = generate_fcpxml(title, prompts, clip_paths, project_dir)
+            # Render latest JAMZ beat to AIFF, looped to match video duration
+            audio_path = None
+            audio_duration = 0.0
+            if beat_src:
+                try:
+                    from bots.jamz_audio import render_midi_to_aiff
+                    n_clips = len(clip_paths)
+                    total_video_dur = sum(max(1, s.get("duration_sec", 3)) for s in prompts[:n_clips])
+                    aiff_path = os.path.join(source_dir,
+                                             os.path.splitext(os.path.basename(beat_src))[0] + ".aiff")
+                    audio_path, audio_duration = render_midi_to_aiff(
+                        beat_src, aiff_path, target_duration=total_video_dur)
+                except Exception as e:
+                    print(f">> ROBOWRIGHT: audio render failed: {e}")
+
+            fcpxml_path = generate_fcpxml(title, prompts, clip_paths, project_dir,
+                                          audio_path=audio_path, audio_duration=audio_duration)
+            if audio_path:
+                audio_note = f"\n  Background audio: {os.path.basename(audio_path)} ({audio_duration:.1f}s)"
+            else:
+                audio_note = "\n  Background audio: skipped (FluidSynth not available or no beat found)"
     except Exception as e:
         print(f">> ROBOWRIGHT: rough cut generation failed: {e}")
 
@@ -348,7 +373,7 @@ def create_imovie_script_package(title: str, script: str, output_dir: str = None
     except Exception as e:
         print(f">> ROBOWRIGHT: registry write failed: {e}")
 
-    draft_label = "new draft" if is_new else "existing draft refreshed"
+    draft_label = "new project (forced)" if force_new else ("new draft" if is_new else "existing draft refreshed")
     subprocess.Popen(["open", project_dir])
     if fcpxml_path:
         subprocess.Popen(["open", "-a", "iMovie", fcpxml_path])
@@ -363,5 +388,5 @@ def create_imovie_script_package(title: str, script: str, output_dir: str = None
         imovie_note = ""
 
     return (f"iMovie opening with rough cut timeline ({draft_label}).\nProduction folder:\n{project_dir}\n\n"
-            f"Files:\n  script.md\n  shot_list.md\n  sora_prompts.md\n  prompts.json\n  media/generated/\n  media/source/{beat_note}{asset_note}{imovie_note}\n\n"
+            f"Files:\n  script.md\n  shot_list.md\n  sora_prompts.md\n  prompts.json\n  media/generated/\n  media/source/{beat_note}{asset_note}{imovie_note}{audio_note}\n\n"
             f"Press play in iMovie to preview the rough cut.")
