@@ -15,7 +15,7 @@ def generate_fcpxml(title: str, prompts: List[Dict], clip_paths: List[str], proj
     prompts and clip_paths are zipped (stops at the shorter list).
     Returns absolute path to the written .fcpxml file.
     """
-    resources = ['    <format id="r1" width="1080" height="1920" frameDuration="1/30s"/>']
+    resources = ['    <format id="r1" name="FFVideoFormat1080p30" frameDuration="100/3000s" width="1920" height="1080" colorSpace="1-1-1 (Rec. 709)"/>']
     clips = []
     offset = 0
 
@@ -28,10 +28,10 @@ def generate_fcpxml(title: str, prompts: List[Dict], clip_paths: List[str], proj
         resources.append(
             f'    <asset id="{asset_id}" name="{name}" uid="{uid}"'
             f' src="{_file_url(clip_path)}" start="0s" duration="{dur}s"'
-            f' hasVideo="1" hasAudio="0"/>'
+            f' format="r1" hasVideo="1" hasAudio="0"/>'
         )
         clips.append(
-            f'          <clip name="{name}" ref="{asset_id}"'
+            f'          <asset-clip name="{name}" ref="{asset_id}"'
             f' offset="{offset}s" duration="{dur}s" start="0s"/>'
         )
         offset += dur
@@ -43,7 +43,7 @@ def generate_fcpxml(title: str, prompts: List[Dict], clip_paths: List[str], proj
         '  <resources>',
         *resources,
         '  </resources>',
-        '  <library>',
+        f'  <library location="{_file_url(os.path.expanduser("~/Movies/iMovie Library.imovielibrary"))}">',
         '    <event name="ROBOWRIGHT">',
         f'      <project name="{escape(title)}" uid="{str(uuid.uuid4()).upper()}">',
         f'        <sequence duration="{offset}s" format="r1"'
