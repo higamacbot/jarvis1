@@ -17,7 +17,6 @@ margin_analysis.py
 portfolio_solution.py
 sync_portfolio_minimal.py
 test_briefing.py
-bots/router_broken.py
 .doctorbot_status.json
 jarvis.log
 .windsurfrules
@@ -25,15 +24,12 @@ briefing.log
 brainstorm/
 pdfs/
 chroma_db/
-pdfs/
-brainstorm/
 clips/
 beats/
 screenshots/
 drafts/
-screenshots/
-.env
 .venv311/
 jarvis311.log
 jarvis.log.*.bak
 *.bak.*
+*.bak
