@@ -218,11 +218,7 @@ async def generate_briefing(time_of_day):
     
     briefing_lines.append("")
     briefing_lines.append("ð HEADLINES")
-    briefing_lines.append("1. Tech stocks show mixed performance in after-hours trading")
-    briefing_lines.append("2. Federal Reserve signals potential rate pause in upcoming meeting")
-    briefing_lines.append("3. Bitcoin holds steady above $75,000 resistance level")
-    briefing_lines.append("4. Options traders position for major tech earnings next week")
-    briefing_lines.append("5. Market volatility index drops to lowest level this month")
+    briefing_lines.append("Headlines unavailable — use /brief for live news.")
     
     briefing_lines.append("")
     briefing_lines.append("ð SYSTEM")

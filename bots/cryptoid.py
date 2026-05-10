@@ -307,15 +307,11 @@ async def generate_crypto_briefing():
     briefing_lines.append("")
     
     briefing_lines.append("ð ANALYSIS")
-    briefing_lines.append("BTC showing strength above $75K resistance")
-    briefing_lines.append("ETH consolidating, waiting for breakout catalyst")
-    briefing_lines.append("DOGE stable - meme coin momentum building")
+    briefing_lines.append("Analysis: live prices shown above — no autonomous signal generated.")
     briefing_lines.append("")
-    
+
     briefing_lines.append("ð SIGNAL")
-    briefing_lines.append("ACCUMULATE BTC on dips - institutional buying continues")
-    briefing_lines.append("HOLD ETH - pending ETF developments")
-    briefing_lines.append("WATCH DOGE - meme coin season approaching")
+    briefing_lines.append("Signal: HOLD — ask Cryptoid directly for live analysis.")
     briefing_lines.append("")
     
     briefing_lines.append("Crypto briefing complete. Standing by, sir.")
