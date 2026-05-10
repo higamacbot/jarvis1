@@ -306,9 +306,32 @@ def create_imovie_script_package(title: str, script: str, output_dir: str = None
     write_sora_prompts_markdown(title, prompts, sora_md_path)
     write_prompts_json(prompts, prompts_json_path)
 
-    subprocess.Popen(["open", project_dir])
-    open_imovie()
+    try:
+        from bots.video_asset_generator import generate_stub_assets
+        generate_stub_assets(generated_dir, prompts, title)
+        asset_note = f"\n  media/generated/generation_manifest.json\n  media/generated/shot_01.txt … shot_{len(prompts):02d}.txt"
+    except Exception as e:
+        asset_note = f"\n  (stub asset generation skipped: {e})"
 
-    return (f"iMovie opening. Production folder revealed in Finder:\n{project_dir}\n\n"
-            f"Files:\n  script.md\n  shot_list.md\n  sora_prompts.md\n  prompts.json\n  media/generated/\n  media/source/{beat_note}\n\n"
-            f"In iMovie: File → Import Media → select media/source/ or media/generated/.")
+    clip_paths = []
+    fcpxml_path = None
+    try:
+        from bots.placeholder_clip_generator import generate_placeholder_clips
+        from bots.fcpxml_generator import generate_fcpxml
+        clip_paths = generate_placeholder_clips(prompts, generated_dir)
+        if clip_paths:
+            fcpxml_path = generate_fcpxml(title, prompts, clip_paths, project_dir)
+    except Exception as e:
+        print(f">> ROBOWRIGHT: rough cut generation failed: {e}")
+
+    subprocess.Popen(["open", project_dir])
+    if fcpxml_path:
+        subprocess.Popen(["open", "-a", "iMovie", fcpxml_path])
+        imovie_note = f"\n  project.fcpxml ({len(clip_paths)} clips in timeline)"
+    else:
+        subprocess.Popen(["open", "-a", "iMovie"])
+        imovie_note = ""
+
+    return (f"iMovie opening with rough cut timeline. Production folder:\n{project_dir}\n\n"
+            f"Files:\n  script.md\n  shot_list.md\n  sora_prompts.md\n  prompts.json\n  media/generated/\n  media/source/{beat_note}{asset_note}{imovie_note}\n\n"
+            f"Press play in iMovie to preview the rough cut.")
