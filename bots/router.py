@@ -337,8 +337,29 @@ Every agent line must be present."""
         raw_reply = await ask_fn(roundtable_request, system_override=ROUNDTABLE_PROMPT, extra_context=roundtable_context, timeout=240.0)
         return normalize_roundtable_output(raw_reply)
 
-    # Jarvis uses default system prompt (same as main /ws endpoint)
+    # Jarvis — top-level video orchestration + default fallthrough
     if bot_id == "jarvisbot":
+        import re as _re
+        _jq = user_msg.lower().strip()
+        _FORCE_PREFIXES = ("new project: ", "fresh cut: ")
+        _force_new = any(_jq.startswith(p) for p in _FORCE_PREFIXES)
+        if _force_new:
+            _plen = next(len(p) for p in _FORCE_PREFIXES if _jq.startswith(p))
+            _jq = _jq[_plen:]
+            user_msg = user_msg[_plen:]
+        # Match "make (me) a <topic> video/short/youtube/tiktok" regardless of topic length
+        _MAKE_RE = _re.compile(r'\b(make(\s+me)?\s+a(n?)\s+|create\s+a(n?)\s+)', _re.IGNORECASE)
+        _VTYPE_RE = _re.compile(r'\b(video|short|youtube|tiktok)\b', _re.IGNORECASE)
+        if _MAKE_RE.search(_jq) and _VTYPE_RE.search(_jq):
+            # Strip leading verb and trailing video-type word to get the topic
+            topic = _MAKE_RE.sub('', _jq)
+            topic = _VTYPE_RE.sub('', topic).strip().strip(',').strip() or user_msg.strip()
+            from bots.robowright_media import pitch_video_concept, save_script
+            from mac_tools import create_imovie_script_package
+            result = await pitch_video_concept(topic)
+            save_script(topic, result)
+            launch_msg = create_imovie_script_package(topic, result, force_new=_force_new)
+            return f"Kicking off ROBOWRIGHT for \"{topic}\", sir.\n\n{result}\n\n---\n{launch_msg}"
         return await ask_fn(user_msg)
 
     # Debate room — runs all 3 debate bots and returns colored response
