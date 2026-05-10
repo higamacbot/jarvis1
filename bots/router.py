@@ -295,9 +295,11 @@ async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
             from mac_tools import create_garageband_template
             result = await design_beat(user_msg)
             import re
-            bpm_match = re.search(r'BPM[:\s]+(\d+)', result)
+            bpm_match = re.search(r'BPM\*{0,2}\s*:?\s*\*{0,2}\s*(\d+)', result, re.IGNORECASE)
+            key_match = re.search(r'KEY\*{0,2}\s*:?\s*\*{0,2}\s*([A-G][#b]?(?:\s*(?:major|minor|maj|min))?)', result, re.IGNORECASE)
             bpm = int(bpm_match.group(1)) if bpm_match else 120
-            launch_msg = create_garageband_template(user_msg, bpm)
+            key = key_match.group(1).strip() if key_match else "C"
+            launch_msg = create_garageband_template(user_msg, bpm, key)
             return f"JAMZ\n{result}\n\n---\n{launch_msg}"
 
     if bot_id == "roundtable":
@@ -768,10 +770,12 @@ Broker Breakdown:
             from bots.jamz_engine import design_beat
             result = await design_beat(vibe)
             import re
-            bpm_match = re.search(r'BPM[:\s]+(\d+)', result)
+            bpm_match = re.search(r'BPM\*{0,2}\s*:?\s*\*{0,2}\s*(\d+)', result, re.IGNORECASE)
+            key_match = re.search(r'KEY\*{0,2}\s*:?\s*\*{0,2}\s*([A-G][#b]?(?:\s*(?:major|minor|maj|min))?)', result, re.IGNORECASE)
             bpm = int(bpm_match.group(1)) if bpm_match else 120
+            key = key_match.group(1).strip() if key_match else "C"
             from mac_tools import create_garageband_template
-            launch_msg = create_garageband_template(vibe, bpm)
+            launch_msg = create_garageband_template(vibe, bpm, key)
             return result + f"\n\n---\n{launch_msg}"
         elif q.startswith("set "):
             event = user_msg[4:].strip()
