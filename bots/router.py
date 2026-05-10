@@ -182,6 +182,96 @@ DEBATE ROOM:
 - LIB MOM says: ...
 - MAGA DAD says: ..."""
 
+def _pinkslip_reason_from_line(line_value: int) -> str:
+    abs_line = abs(line_value)
+    if line_value > 0:
+        return "Live underdog price offers a smaller-plus-money stab."
+    if abs_line <= 130:
+        return "Short favorite price keeps the risk manageable."
+    if abs_line <= 220:
+        return "Mid-range favorite price is playable without extreme juice."
+    return "Heavy favorite only makes sense if you trust the spot."
+
+
+def _parse_odds_games(odds_data: str):
+    import re
+    team_to_game = {}
+    game_index = 0
+    pattern = re.compile(r"•\s+(.+?)\s+@\s+(.+?)\s+—\s+(.+?)\s+([+-]\d+)\s+/\s+(.+?)\s+([+-]\d+)")
+    for line in (odds_data or "").splitlines():
+        m = pattern.search(line.strip())
+        if not m:
+            continue
+        away, home, team1, line1, team2, line2 = m.groups()
+        game_key = f"game_{game_index}"
+        game_index += 1
+        team_to_game[team1.strip().lower()] = game_key
+        team_to_game[team2.strip().lower()] = game_key
+        team_to_game[away.strip().lower()] = game_key
+        team_to_game[home.strip().lower()] = game_key
+    return team_to_game
+
+
+def _postprocess_pinkslip_card(reply: str, odds_data: str) -> str:
+    import re
+
+    if not reply:
+        return reply
+
+    team_to_game = _parse_odds_games(odds_data)
+
+    # Parse line by line to avoid collapsing newlines into team names
+    line_pattern = re.compile(
+        r"^([A-Z][A-Za-z0-9 .'-]+?)\s*\|\s*([+-]?\d+)\s*\|\s*(\d+)%\s*\|\s*(\d+)\s*units?\s*\|\s*(.+)$"
+    )
+
+    parsed = []
+    for raw_line in reply.splitlines():
+        raw_line = raw_line.strip()
+        m = line_pattern.match(raw_line)
+        if not m:
+            continue
+        team = m.group(1).strip()
+        line = m.group(2).strip()
+        conf = m.group(3).strip()
+        units = m.group(4).strip()
+        reason = m.group(5).strip(" .")
+        parsed.append((team, line, conf, units, reason))
+
+    if not parsed:
+        return reply
+
+    filtered = []
+    seen_games = set()
+
+    for team, line, conf, units, reason in parsed:
+        game_key = team_to_game.get(team.lower(), team.lower())
+        if game_key in seen_games:
+            continue
+        seen_games.add(game_key)
+
+        try:
+            units_num = max(1, min(3, int(units)))
+        except Exception:
+            units_num = 1
+        units_text = f"{units_num} unit" if units_num == 1 else f"{units_num} units"
+
+        try:
+            line_val = int(line)
+        except Exception:
+            line_val = 0
+
+        if reason.lower() in {"value bet", "best bet", "edge", "playable"} or len(reason) < 12:
+            reason = _pinkslip_reason_from_line(line_val)
+
+        filtered.append(f"{team} | {line} | {conf}% | {units_text} | {reason}")
+
+        if len(filtered) >= 4:
+            break
+
+    return "\n".join(filtered) if filtered else reply
+
+
 async def route_message(bot_id: str, user_msg: str, ask_fn) -> str:
     print(f">> ROUTER DEBUG: bot_id = '{bot_id}'")
     
@@ -351,8 +441,28 @@ Analyze real inventory, suggest improvements, pricing strategy, or new product i
 
 User asked: {user_msg}
 
-Give your sharp betting analysis. Flag value bets, recommend unit sizes (1 unit = $25), and confidence %."""
-                return await ask_fn(analysis_prompt, system_override=pinkslip.SYSTEM_PROMPT)
+Return a concise betting card using ONLY the live lines above.
+
+Hard rules:
+- Max 4 picks total.
+- Pick only ONE side per game. Never include both teams from the same matchup.
+- If there is no edge, skip the game.
+- Do not show implied probability math.
+- Do not explain both sides.
+- Do not write headers, bullets, or long analysis sections.
+- Return plain text only.
+- Use exactly this format for each pick:
+Team | Line | Confidence% | X units | Specific one-sentence reason
+- Use "1 unit", "2 units", or "3 units" exactly.
+- Max 3 units per pick.
+- Lead with the strongest play first.
+- Reasons must be specific to the line or matchup.
+- Never use vague reasons like "Value bet" by itself.
+- Never output duplicate games.
+
+If the user asked for odds instead of picks, still return only the best current sides in the same format."""
+                raw_reply = await ask_fn(analysis_prompt, system_override=pinkslip.SYSTEM_PROMPT)
+                return _postprocess_pinkslip_card(raw_reply, odds_data)
             except Exception as e:
                 print(f">> PINKSLIP ODDS ERROR: {e}")
                 # Fall through to regular Ollama
@@ -636,8 +746,25 @@ Broker Breakdown:
     # Jamz commands
     if bot_id == "jamz":
         q = user_msg.lower().strip()
-        if q.startswith("beat "):
-            vibe = user_msg[5:].strip()
+
+        beat_triggers = [
+            "beat ",
+            "can you make a beat",
+            "make me a beat",
+            "make a beat",
+            "make music",
+            "make me music",
+            "build me a beat",
+            "create a beat",
+        ]
+
+        if q.startswith("beat ") or any(trigger in q for trigger in beat_triggers[1:]):
+            vibe = user_msg[5:].strip() if q.startswith("beat ") else user_msg.strip()
+            vibe = vibe.replace("can you make a beat", "").replace("make me a beat", "")
+            vibe = vibe.replace("make a beat", "").replace("make music", "").replace("make me music", "")
+            vibe = vibe.replace("build me a beat", "").replace("create a beat", "").strip(" :,-")
+            if not vibe:
+                vibe = "dark cinematic trap, 140 bpm"
             from bots.jamz_engine import design_beat
             result = await design_beat(vibe)
             import re
@@ -645,7 +772,7 @@ Broker Breakdown:
             bpm = int(bpm_match.group(1)) if bpm_match else 120
             from mac_tools import create_garageband_template
             launch_msg = create_garageband_template(vibe, bpm)
-            return result + f"\n\n---\n{launch_msg}" 
+            return result + f"\n\n---\n{launch_msg}"
         elif q.startswith("set "):
             event = user_msg[4:].strip()
             from bots.jamz_engine import plan_dj_set

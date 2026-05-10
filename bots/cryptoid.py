@@ -35,14 +35,17 @@ ALPACA_SECRET = os.getenv("ALPACA_SECRET")
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "qwen3:8b"
 
-client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
+def _get_trading_client():
+    if not ALPACA_KEY or not ALPACA_SECRET:
+        raise RuntimeError("Missing ALPACA_KEY or ALPACA_SECRET")
+    return TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 
 async def get_crypto_portfolio():
     """Fetch multi-broker crypto portfolio data"""
     try:
         # Import multi-broker portfolio
         import sys
-        sys.path.append('..')
+        sys.path.insert(0, "/Users/higabot1/jarvis1-1")
         from multi_broker_portfolio import MultiBrokerPortfolio
         
         portfolio_tracker = MultiBrokerPortfolio()
@@ -50,8 +53,9 @@ async def get_crypto_portfolio():
         
         # Get Alpaca paper trading data
         try:
-            acct = client.get_account()
-            pos = client.get_all_positions()
+            _client = _get_trading_client()
+            acct = _client.get_account()
+            pos = _client.get_all_positions()
             alpaca_crypto = [
                 {
                     "symbol": p.symbol,

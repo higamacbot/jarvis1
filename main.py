@@ -596,7 +596,24 @@ async def house_websocket(websocket: WebSocket):
             _creative_skip = False
             if bot_id == "robowright" and any(user_msg.lower().startswith(k) for k in ["pitch ", "batch ", "trending"]):
                 _creative_skip = True
-            if bot_id == "jamz" and any(user_msg.lower().startswith(k) for k in ["beat ", "set ", "playlist ", "mashup "]):
+            _jamz_q = user_msg.lower().strip()
+            _jamz_beat_triggers = [
+                "beat ",
+                "can you make a beat",
+                "make me a beat",
+                "make a beat",
+                "make music",
+                "make me music",
+                "build me a beat",
+                "create a beat",
+            ]
+            if bot_id == "jamz" and (
+                _jamz_q.startswith("beat ")
+                or any(t in _jamz_q for t in _jamz_beat_triggers[1:])
+                or _jamz_q.startswith("set ")
+                or _jamz_q.startswith("playlist ")
+                or _jamz_q.startswith("mashup ")
+            ):
                 _creative_skip = True
             # Roundtable creative requests — route to Robowright
             _creative_keywords = ["make me a video", "make a video", "make me a youtube", "make a youtube",
@@ -611,12 +628,14 @@ async def house_websocket(websocket: WebSocket):
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
                 continue
 
-            yt_result, yt_mode = await asyncio.to_thread(handle_youtube_request, user_msg)
-            print(f">> YOUTUBE DEBUG: yt_result length={len(yt_result) if yt_result else 0}, mode={yt_mode}")
-            if yt_result and yt_mode == "youtube_summarize":
-                print(">> YOUTUBE DEBUG: Entering summarize mode")
-                await websocket.send_json({"type": "answer", "bot": bot_id, "text": "Fetching and analyzing video..."})
-                summary_request = """Summarize the verified YouTube video data in extra_context.
+            # YouTube handler - jarvisbot only
+            if bot_id == "jarvisbot":
+                yt_result, yt_mode = await asyncio.to_thread(handle_youtube_request, user_msg)
+                print(f">> YOUTUBE DEBUG: yt_result length={len(yt_result) if yt_result else 0}, mode={yt_mode}")
+                if yt_result and yt_mode == "youtube_summarize":
+                    print(">> YOUTUBE DEBUG: Entering summarize mode")
+                    await websocket.send_json({"type": "answer", "bot": bot_id, "text": "Fetching and analyzing video..."})
+                    summary_request = """Summarize the verified YouTube video data in extra_context.
 Return:
 Title:
 Channel:
@@ -624,21 +643,21 @@ Summary:
 Key Takeaways:
 Bottom Line:
 Do not mention any inability to access external content."""
-                reply = await ask_ollama(
-                    summary_request,
-                    extra_context=yt_result,
-                    system_override=YOUTUBE_SUMMARY_PROMPT
-                )
-                print(f">> YOUTUBE DEBUG: Ollama reply length={len(reply) if reply else 0}")
-                print(f">> YOUTUBE DEBUG: Ollama reply preview: {reply[:100] if reply else 'No reply'}...")
-                memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
-                await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
-                print(">> YOUTUBE DEBUG: YouTube response sent, continuing...")
-                continue
-            elif yt_result:
-                print(">> YOUTUBE DEBUG: Direct YouTube response")
-                await websocket.send_json({"type": "answer", "bot": bot_id, "text": yt_result})
-                continue
+                    reply = await ask_ollama(
+                        summary_request,
+                        extra_context=yt_result,
+                        system_override=YOUTUBE_SUMMARY_PROMPT
+                    )
+                    print(f">> YOUTUBE DEBUG: Ollama reply length={len(reply) if reply else 0}")
+                    print(f">> YOUTUBE DEBUG: Ollama reply preview: {reply[:100] if reply else 'No reply'}...")
+                    memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+                    await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
+                    print(">> YOUTUBE DEBUG: YouTube response sent, continuing...")
+                    continue
+                elif yt_result:
+                    print(">> YOUTUBE DEBUG: Direct YouTube response")
+                    await websocket.send_json({"type": "answer", "bot": bot_id, "text": yt_result})
+                    continue
 
             # Mac command (Jarvis room only)
             if bot_id == "jarvisbot":
