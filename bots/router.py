@@ -340,6 +340,20 @@ Every agent line must be present."""
     # Jarvis — top-level video orchestration + default fallthrough
     if bot_id == "jarvisbot":
         import re as _re
+
+        # Clip-farmer: "clip this: URL" / "farm clips from: URL"
+        _CLIP_TRIGGER_RE = _re.compile(r'\b(clip\s+this|farm\s+clips?\s+from)\b', _re.IGNORECASE)
+        _YT_URL_RE = _re.search(
+            r'https?://(?:www\.)?(?:youtube\.com/watch\?[^\s]*v=|youtu\.be/)[A-Za-z0-9_-]+[^\s]*',
+            user_msg,
+        )
+        if _CLIP_TRIGGER_RE.search(user_msg) and _YT_URL_RE:
+            _clip_url = _YT_URL_RE.group(0)
+            from bots.clipfarmer import farm_clips
+            import asyncio as _asyncio
+            result = await _asyncio.to_thread(farm_clips, _clip_url)
+            return f"Clipping now, sir. This may take a minute while I download and cut.\n\n{result}"
+
         _jq = user_msg.lower().strip()
         _FORCE_PREFIXES = ("new project: ", "fresh cut: ")
         _force_new = any(_jq.startswith(p) for p in _FORCE_PREFIXES)

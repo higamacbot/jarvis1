@@ -622,6 +622,13 @@ async def house_websocket(websocket: WebSocket):
             if bot_id == "roundtable" and any(k in user_msg.lower() for k in _creative_keywords):
                 _creative_skip = True
 
+            # Clip-farmer commands must bypass the YouTube summarize handler
+            import re as _main_re
+            _CLIP_TRIGGER = _main_re.compile(r'\b(clip\s+this|farm\s+clips?\s+from)\b', _main_re.IGNORECASE)
+            _HAS_YT_URL   = _main_re.search(r'https?://(?:www\.)?(?:youtube\.com|youtu\.be)/\S+', user_msg)
+            if bot_id == "jarvisbot" and _CLIP_TRIGGER.search(user_msg) and _HAS_YT_URL:
+                _creative_skip = True
+
             if _creative_skip:
                 reply = await route_message(bot_id, user_msg, ask_ollama)
                 memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
