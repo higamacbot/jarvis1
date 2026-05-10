@@ -122,6 +122,16 @@ async def fetch_headlines(n=5) -> str:
     except Exception as e:
         return f"Headlines unavailable: {e}"
 
+async def _get_pinkslip_brief() -> str:
+    try:
+        import sys
+        sys.path.insert(0, "/Users/higabot1/jarvis1-1")
+        from pinkslip_odds import get_all_default
+        return await get_all_default(limit_per_sport=2)
+    except Exception as e:
+        print(f">> PINKSLIP BRIEF ERROR: {e}")
+        return ""
+
 async def generate_briefing(time_of_day):
     now = datetime.now().strftime('%B %d, %Y — %I:%M %p CST')
     is_morning = time_of_day == "morning"
@@ -134,6 +144,7 @@ async def generate_briefing(time_of_day):
     cpu, ram_used, ram_total, disk = get_system_stats()
     crypto_total, crypto_lines, wb_crypto, cb_total, kr_equity = get_real_crypto()
     headlines = await fetch_headlines(5)
+    pinkslip_section = await _get_pinkslip_brief()
 
     # Build position strings
     pos_lines = ""
@@ -230,6 +241,8 @@ Format the briefing EXACTLY like this. Use the real data above. No placeholders:
             briefing += f"\n\n🔧 CODE: {health_line}"
             if draft_idea:
                 briefing += f"\n{draft_idea}"
+            if pinkslip_section:
+                briefing += f"\n\n🎯 PINKSLIP TOP PICKS:\n{pinkslip_section}"
             print(f"\n{briefing}\n")
             return briefing
     except Exception as e:
