@@ -217,8 +217,9 @@ def _analyze_clips(segments: List[Dict], moments: List[Dict], title: str,
     One Ollama call → analysis.json + analysis.md.
     Fails gracefully — never raises, never blocks clip output.
     """
+    print(f">> CLIPFARMER ANALYZE: entered — segments={len(segments)} moments={len(moments)} bots={bots}")
     if not segments:
-        print(">> CLIPFARMER: skipping analysis (no transcript)")
+        print(">> CLIPFARMER ANALYZE: skipping (no transcript)")
         return False
 
     transcript_summary = _build_summary(segments, max_chars=5000)
@@ -254,27 +255,36 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no extra
 For bot_tags, fill in real observations for each bot based on the transcript.
 Use integer seconds. Include 3-5 important sections and 2-3 tags per bot."""
 
+    print(f">> CLIPFARMER ANALYZE: calling Ollama ({OLLAMA_MODEL}) timeout=120s prompt_len={len(prompt)}")
+    raw = ""
     try:
         import httpx
         r = httpx.post(OLLAMA_URL,
                        json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
                        timeout=120.0)
-        raw = r.json().get("response", "") if r.status_code == 200 else ""
+        print(f">> CLIPFARMER ANALYZE: Ollama status={r.status_code}")
+        if r.status_code == 200:
+            raw = r.json().get("response", "")
+            print(f">> CLIPFARMER ANALYZE: raw response len={len(raw)} first80={raw[:80]!r}")
+        else:
+            print(f">> CLIPFARMER ANALYZE: non-200 body={r.text[:200]!r}")
     except Exception as e:
-        print(f">> CLIPFARMER: analysis Ollama call failed: {e}")
-        raw = ""
+        print(f">> CLIPFARMER ANALYZE: Ollama call failed: {e}")
 
     # Parse JSON — try strict match first, then first {...} block
     data = None
     if raw:
-        for pattern in (r"\{.*\}", r"\{[\s\S]*\}"):
+        for label, pattern in [("greedy-dot", r"\{.*\}"), ("dotall", r"\{[\s\S]*\}")]:
             m = re.search(pattern, raw, re.DOTALL)
             if m:
                 try:
                     data = json.loads(m.group(0))
+                    print(f">> CLIPFARMER ANALYZE: JSON parsed OK via {label}, keys={list(data.keys())}")
                     break
-                except json.JSONDecodeError:
-                    continue
+                except json.JSONDecodeError as je:
+                    print(f">> CLIPFARMER ANALYZE: JSON parse failed ({label}): {je}")
+    else:
+        print(">> CLIPFARMER ANALYZE: raw is empty — skipping JSON parse")
 
     # Build the full analysis dict regardless of whether Ollama succeeded
     analysis = {
@@ -286,11 +296,16 @@ Use integer seconds. Include 3-5 important sections and 2-3 tags per bot."""
         "important_sections": data.get("important_sections", []) if data else [],
         "bot_tags": data.get("bot_tags", {b: [] for b in bots}) if data else {b: [] for b in bots},
     }
+    print(f">> CLIPFARMER ANALYZE: analysis dict built — ollama_data={'yes' if data else 'no (fallback empty)'}")
 
+    analysis_json_path = os.path.join(out_dir, "analysis.json")
+    analysis_md_path   = os.path.join(out_dir, "analysis.md")
+    print(f">> CLIPFARMER ANALYZE: writing to {analysis_json_path}")
     try:
         # analysis.json
-        with open(os.path.join(out_dir, "analysis.json"), "w", encoding="utf-8") as f:
+        with open(analysis_json_path, "w", encoding="utf-8") as f:
             json.dump(analysis, f, indent=2, ensure_ascii=False)
+        print(f">> CLIPFARMER ANALYZE: analysis.json written OK ({os.path.getsize(analysis_json_path)} bytes)")
 
         # analysis.md
         md = [f"# Analysis — {title}", "",
@@ -326,14 +341,199 @@ Use integer seconds. Include 3-5 important sections and 2-3 tags per bot."""
                     md.append(f"  {tag['note']}")
             md.append("")
 
-        with open(os.path.join(out_dir, "analysis.md"), "w", encoding="utf-8") as f:
+        with open(analysis_md_path, "w", encoding="utf-8") as f:
             f.write("\n".join(md) + "\n")
 
-        print(">> CLIPFARMER: analysis artifacts saved")
+        print(">> CLIPFARMER ANALYZE: analysis.md written OK")
         return True
     except Exception as e:
-        print(f">> CLIPFARMER: analysis write failed: {e}")
+        print(f">> CLIPFARMER ANALYZE: write failed: {e}")
         return False
+
+
+def _ingest_to_bot_memory(analysis: Dict, url: str) -> List[Tuple[str, str, str]]:
+    """
+    Write per-bot memory entries from analysis output.
+    Returns memory_log: list of (bot_id, "saved"|"skipped", detail).
+    """
+    print(">> CLIPFARMER MEMORY: entering _ingest_to_bot_memory")
+    try:
+        from bot_memory import save_bot_memory
+        print(">> CLIPFARMER MEMORY: bot_memory imported OK")
+    except Exception as e:
+        print(f">> CLIPFARMER MEMORY: bot_memory unavailable, skipping ingest: {e}")
+        return []
+
+    title = analysis.get("title", "untitled")
+    summary = analysis.get("summary", "")
+    insights = analysis.get("key_insights", [])
+    bot_tags = analysis.get("bot_tags", {}) or {}
+
+    print(f">> CLIPFARMER MEMORY: title={title!r} summary_len={len(summary)} insights={len(insights)} bot_ids={list(bot_tags.keys())}")
+
+    insight_lines = [f"- {item}" for item in insights[:3] if str(item).strip()]
+    memory_log: List[Tuple[str, str, str]] = []
+
+    for bot_id, tags in bot_tags.items():
+        tags = tags or []
+        print(f">> CLIPFARMER MEMORY: processing {bot_id} — {len(tags)} tags")
+
+        lines = [
+            f"CLIPFARMER SOURCE: {title}",
+            f"URL: {url}",
+        ]
+        if summary:
+            lines.append(f"Summary: {summary}")
+        if insight_lines:
+            lines.append("Key insights:")
+            lines.extend(insight_lines)
+
+        if tags:
+            lines.append("Moments:")
+            for tag in tags:
+                start = int(tag.get("start_sec", 0))
+                end = int(tag.get("end_sec", 0))
+                sm, ss = divmod(start, 60)
+                em, es = divmod(end, 60)
+                angle = str(tag.get("angle", "")).strip()
+                note = str(tag.get("note", "")).strip()
+                lines.append(f"[{sm:02d}:{ss:02d}–{em:02d}:{es:02d}] {angle} — {note}")
+        elif bot_id != "jarvisbot":
+            print(f">> CLIPFARMER MEMORY: skipping {bot_id} (empty tags, not jarvisbot)")
+            memory_log.append((bot_id, "skipped", "no tags"))
+            continue
+
+        content = "\n".join(lines).strip()
+        if not content:
+            print(f">> CLIPFARMER MEMORY: skipping {bot_id} (empty content)")
+            memory_log.append((bot_id, "skipped", "empty content"))
+            continue
+
+        print(f">> CLIPFARMER MEMORY: calling save_bot_memory for {bot_id} ({len(content)} chars)")
+        save_bot_memory(
+            bot_id,
+            content,
+            {
+                "source": "clipfarmer",
+                "url": url,
+                "title": title,
+            },
+        )
+        print(f">> CLIPFARMER: memory saved for {bot_id}")
+        detail = f"{len(tags)} tags" if tags else "summary only"
+        memory_log.append((bot_id, "saved", detail))
+
+    return memory_log
+
+
+def _write_report(title: str, url: str, duration: int, landscape: bool,
+                  has_transcript: bool, clips_made: list,
+                  analysis_data: Dict, memory_log: List[Tuple[str, str, str]],
+                  out_dir: str) -> str:
+    """
+    Write report.md — the single human-readable run summary.
+    Returns path on success, empty string on failure.
+    """
+    from datetime import datetime
+    report_path = os.path.join(out_dir, "report.md")
+    try:
+        md = []
+
+        # ── Header ────────────────────────────────────────────────────────────
+        md += [
+            f"# HIGA HOUSE CLIP REPORT — {title}",
+            "",
+            f"**Date:** {datetime.now().strftime('%B %d, %Y @ %I:%M %p')}  ",
+            f"**URL:** {url}  ",
+            f"**Duration:** {_fmt_ts(duration)}  ",
+            f"**Orientation:** {'landscape → portrait crop' if landscape else 'portrait'}  ",
+            f"**Transcript:** {'available' if has_transcript else 'unavailable — equal split used'}  ",
+            "",
+        ]
+
+        # ── Key Insights ──────────────────────────────────────────────────────
+        insights = analysis_data.get("key_insights", [])
+        summary  = analysis_data.get("summary", "")
+        if summary or insights:
+            md.append("## Key Insights")
+            if summary:
+                md += [summary, ""]
+            for item in insights:
+                md.append(f"- {item}")
+            md.append("")
+
+        # ── Clips Selected ────────────────────────────────────────────────────
+        if clips_made:
+            md += ["## Clips Selected", ""]
+            md.append("| File | Timecode | Notes |")
+            md.append("|------|----------|-------|")
+            for i, start, end, reason in clips_made:
+                sm, ss = divmod(start, 60)
+                em, es = divmod(end, 60)
+                md.append(f"| clip_{i:02d}.mp4 | [{sm:02d}:{ss:02d} – {em:02d}:{es:02d}] | {reason} |")
+            md.append("")
+
+        # ── Important Sections ────────────────────────────────────────────────
+        sections = analysis_data.get("important_sections", [])
+        if sections:
+            md.append("## Important Sections")
+            md.append("")
+            for sec in sections:
+                sm, ss = divmod(int(sec.get("start_sec", 0)), 60)
+                em, es = divmod(int(sec.get("end_sec", 0)), 60)
+                md.append(f"### [{sm:02d}:{ss:02d} – {em:02d}:{es:02d}] {sec.get('label', '')}")
+                if sec.get("quote"):
+                    md.append(f'> "{sec["quote"]}"')
+                md.append("")
+
+        # ── Bot Highlights ────────────────────────────────────────────────────
+        bot_tags = analysis_data.get("bot_tags", {})
+        bots_with_tags = {b: t for b, t in bot_tags.items() if t}
+        if bots_with_tags:
+            md.append("## Bot Highlights")
+            md.append("")
+            for bot_id, tags in bots_with_tags.items():
+                md.append(f"### {bot_id}")
+                for tag in tags:
+                    sm, ss = divmod(int(tag.get("start_sec", 0)), 60)
+                    em, es = divmod(int(tag.get("end_sec", 0)), 60)
+                    angle = str(tag.get("angle", "")).strip()
+                    note  = str(tag.get("note", "")).strip()
+                    md.append(f"- **[{sm:02d}:{ss:02d} – {em:02d}:{es:02d}]** {angle}")
+                    if note:
+                        md.append(f"  {note}")
+                md.append("")
+
+        # ── Memory Ingestion ──────────────────────────────────────────────────
+        if memory_log:
+            md.append("## Memory Ingestion")
+            md.append("")
+            for bot_id, status, detail in memory_log:
+                icon = "✓" if status == "saved" else "—"
+                md.append(f"- {icon} **{bot_id}**: {status} ({detail})")
+            saved_count = sum(1 for _, s, _ in memory_log if s == "saved")
+            md += ["", f"_{saved_count} of {len(memory_log)} bots received a ChromaDB memory entry._", ""]
+        else:
+            md += ["## Memory Ingestion", "", "_No memory ingestion (no analysis data or transcript)._", ""]
+
+        # ── Footer ────────────────────────────────────────────────────────────
+        md += ["---", f"_Generated by HIGA HOUSE clipfarmer — {out_dir}_", ""]
+
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(md))
+
+        print(f">> CLIPFARMER: report.md written ({os.path.getsize(report_path)} bytes)")
+        return report_path
+
+    except Exception as e:
+        print(f">> CLIPFARMER: report.md write failed: {e}")
+        return ""
+
+
+def _fmt_ts(secs: int) -> str:
+    m, s = divmod(secs, 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
 # ── main entry point ──────────────────────────────────────────────────────────
@@ -385,14 +585,41 @@ def farm_clips(url: str, n_clips: int = 5) -> str:
         if _cut_clip(source, start, end, out_path, landscape):
             clips_made.append((i, start, end, mo["reason"]))
 
-    # 6. Analysis artifacts
+    # 6. Analysis artifacts + report
     artifact_note = ""
+    analysis_data: Dict = {}
+    memory_log: List[Tuple[str, str, str]] = []
+
     if has_transcript:
         _save_transcript(segments, title, out_dir)
         transcript_text = " ".join(s.get("text", "") for s in segments)
         bots = _detect_relevant_bots(transcript_text)
         _analyze_clips(segments, moments, title, url, duration, out_dir, bots)
         artifact_note = "\n  transcript.json, transcript.md, analysis.json, analysis.md"
+        analysis_path = os.path.join(out_dir, "analysis.json")
+        print(f">> CLIPFARMER MEMORY: checking for analysis.json at {analysis_path}")
+        print(f">> CLIPFARMER MEMORY: file exists = {os.path.isfile(analysis_path)}")
+        try:
+            with open(analysis_path, "r", encoding="utf-8") as f:
+                analysis_data = json.load(f)
+            bot_tags = analysis_data.get("bot_tags", {})
+            print(f">> CLIPFARMER MEMORY: bot_tags keys = {list(bot_tags.keys())}")
+            for bid, tags in bot_tags.items():
+                print(f">> CLIPFARMER MEMORY:   {bid} → {len(tags or [])} tags")
+            memory_log = _ingest_to_bot_memory(analysis_data, url)
+            saved_count = sum(1 for _, s, _ in memory_log if s == "saved")
+            print(f">> CLIPFARMER MEMORY: total saved = {saved_count}")
+            if saved_count:
+                artifact_note += f"\n  {saved_count} bot memory entries written"
+        except Exception as e:
+            print(f">> CLIPFARMER: memory ingest skipped: {e}")
+
+    report_path = _write_report(
+        title, url, duration, landscape, has_transcript,
+        clips_made, analysis_data, memory_log, out_dir,
+    )
+    if report_path:
+        artifact_note += "\n  report.md"
 
     # 7. Open output folder
     subprocess.Popen(["open", out_dir])
