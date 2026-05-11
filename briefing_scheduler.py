@@ -80,6 +80,32 @@ def _normalize_headline(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
+def _classify_driver(text: str) -> str:
+    """Map headline text to a short driver label for dedup and pulse display. Returns '' if no match."""
+    t = text.lower()
+    RULES = [
+        (["iran", "tehran", "persian gulf", "ceasefire iran"],         "Iran ceasefire risk"),
+        (["israel", "gaza", "hamas", "hezbollah", "idf", "west bank"], "Middle East conflict"),
+        (["ukraine", "russia", "nato", "zelensky", "putin", "kyiv"],   "Russia-Ukraine conflict"),
+        (["china", "taiwan", "south china sea", "xi jinping", "beijing"], "China geopolitical pressure"),
+        (["outbreak", "hantavirus", "mpox", "ebola", "pandemic"],      "outbreak travel risk"),
+        (["ransomware", "cyberattack", "data breach", "data leak", "hack"], "cybersecurity breach wave"),
+        (["fed", "federal reserve", "interest rate", "rate hike", "rate cut", "fomc", "powell"], "Fed rate watch"),
+        (["tariff", "trade war", "trade deal", "import tax"],          "trade war escalation"),
+        (["inflation", "cpi", "ppi", "recession", "gdp slowdown"],     "macro economic signal"),
+        (["earnings", "eps", "quarterly results", "revenue beat"],     "earnings season"),
+        (["trump", "congress", "senate", "white house"],               "US political risk"),
+        (["oil", "opec", "crude", "energy crisis"],                    "energy market shift"),
+        (["bitcoin", "ethereum", "crypto", "defi", "sec crypto"],      "crypto regulatory risk"),
+        (["bank run", "fdic", "credit suisse", "svb", "bank failure"], "banking sector stress"),
+        (["openai", "nvidia", "ai chip", "artificial intelligence", "llm"], "AI/tech sector move"),
+    ]
+    for keywords, label in RULES:
+        if any(kw in t for kw in keywords):
+            return label
+    return ""
+
+
 def _headline_fingerprint(text: str):
     import re
     stop_words = {
@@ -94,14 +120,21 @@ def _headline_fingerprint(text: str):
 
 def _dedupe_headline_lines(lines, limit=3):
     seen_bigrams: set = set()
+    seen_drivers: set = set()
     out = []
     for line in lines:
+        # Pre-bucket by geopolitical driver — drop duplicates of same topic category
+        driver = _classify_driver(line)
+        if driver and driver in seen_drivers:
+            continue
         fp = _headline_fingerprint(line)
         if not fp:
             continue
         bigrams = set(zip(fp, fp[1:]))
         if bigrams and (bigrams & seen_bigrams):
             continue  # topic overlaps an already-accepted headline
+        if driver:
+            seen_drivers.add(driver)
         seen_bigrams.update(bigrams)
         out.append(line)
         if len(out) >= limit:
@@ -273,12 +306,16 @@ def _section_bot_pulse(statuses: dict, portfolio: dict, crypto_total: float,
     crypto_parts = [f"{k} `${v:,.0f}`" for k, v in prices.items()] if prices else [f"Total `${crypto_total:,.2f}`"]
     pink_pick = _first_pick(pinkslip_str)
 
-    # Compress top_headline to a short topic anchor (first 5 words)
-    if top_headline:
+    # Compress top_headline to driver label or short topic anchor
+    driver = _classify_driver(top_headline) if top_headline else ""
+    if driver:
+        jarvis_pulse = f"Main driver: {driver}"
+    elif top_headline:
         words = top_headline.split()
         topic = " ".join(words[:5]) + ("..." if len(words) > 5 else "")
+        jarvis_pulse = f"Tracking: {topic}"
     else:
-        topic = "No dominant signal"
+        jarvis_pulse = "No dominant signal"
 
     # PINKSLIP: show matchup only, strip odds
     if pink_pick:
@@ -288,7 +325,7 @@ def _section_bot_pulse(statuses: dict, portfolio: dict, crypto_total: float,
         pink_line = "No standout line on the board."
 
     contributions = [
-        ("jarvisbot", f"Tracking: {topic}"),
+        ("jarvisbot", jarvis_pulse),
         ("stockbot", f"Portfolio posture: {stock_line}"),
         ("cryptoid", f"Crypto posture: {' | '.join(crypto_parts)}"),
         ("pinkslip", pink_line),
@@ -360,12 +397,16 @@ async def _build_top_of_mind(portfolio: dict, crypto_total: float, prices: dict,
     except Exception as e:
         print(f">> TOP OF MIND ERROR: {e}")
 
-    direction = "positive" if day_pl >= 0 else "negative"
-    news = top_headline or "Headline flow is mixed"
+    driver = _classify_driver(top_headline) if top_headline else ""
+    news_frame = (
+        f"The dominant macro driver is {driver}"
+        if driver else
+        (top_headline or "Headline flow is mixed")
+    )
     s2 = (f"Your best name is {best_pos} — stay the course." if best_pos and day_pl >= 0
           else f"Watch {worst_pos} closely before adding exposure." if worst_pos
           else f"Hold at ${equity:,.2f} equity and monitor the tape.")
-    return f"{news}. {s2}"
+    return f"{news_frame}. {s2}"
 
 
 # ── Main briefing entry point ─────────────────────────────────────────────────
