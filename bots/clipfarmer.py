@@ -1,8 +1,9 @@
 """
-clipfarmer.py — YouTube → short-form clip pipeline.
+clipfarmer.py — YouTube / TikTok → short-form clip pipeline.
 
 Pipeline: yt-dlp download → timestamped transcript → Ollama moment selection → ffmpeg cut.
-Falls back to equal-segment split if transcript or Ollama is unavailable.
+Transcript sources tried in order: YouTube transcript API → yt-dlp subtitles → local Whisper.
+Falls back to equal-segment split when no transcript is available.
 """
 import os
 import re
@@ -18,6 +19,10 @@ CLIPS_BASE   = os.path.expanduser("~/Movies/HIGA HOUSE Clips")
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+def _is_youtube(url: str) -> bool:
+    return bool(re.search(r'(?:youtube\.com|youtu\.be)', url, re.IGNORECASE))
+
 
 def _extract_video_id(url: str) -> str:
     m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
@@ -49,18 +54,107 @@ def _download_video(url: str, out_dir: str) -> Tuple[Optional[str], str, int]:
         return None, "", 0
 
 
-def _get_segments(video_id: str) -> List[Dict]:
-    """Fetch timestamped transcript segments. Returns [] on failure."""
+def _get_transcript(url: str, source_path: str) -> Tuple[List[Dict], str]:
+    """
+    Fetch transcript segments using the best available method.
+    Returns (segments, method) where method is one of:
+      "youtube_api" | "yt_dlp_subs" | "whisper" | "none"
+    """
+    # ── Tier 1: YouTube Transcript API (YouTube only) ─────────────────────────
+    if _is_youtube(url):
+        video_id = _extract_video_id(url)
+        try:
+            from youtube_transcript_api import YouTubeTranscriptApi
+            ytt = YouTubeTranscriptApi()
+            fetched = ytt.fetch(video_id)
+            segs = [{"text": s.text, "start": s.start, "duration": s.duration}
+                    for s in fetched]
+            if segs:
+                print(f">> CLIPFARMER: transcript via youtube_api ({len(segs)} segments)")
+                return segs, "youtube_api"
+        except Exception as e:
+            print(f">> CLIPFARMER: youtube_api failed: {e}")
+
+    # ── Tier 2: yt-dlp subtitles (any platform) ───────────────────────────────
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-        ytt = YouTubeTranscriptApi()
-        fetched = ytt.fetch(video_id)
-        # FetchedTranscript is iterable; each item is a FetchedTranscriptSnippet
-        # with .text, .start, .duration attributes (no to_dict in current API version)
-        return [{"text": s.text, "start": s.start, "duration": s.duration}
-                for s in fetched]
+        import yt_dlp
+        sub_dir = os.path.dirname(source_path)
+        ydl_opts = {
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": ["en", "en-US", "en-GB"],
+            "subtitlesformat": "vtt",
+            "skip_download": True,
+            "outtmpl": os.path.join(sub_dir, "subs.%(ext)s"),
+            "quiet": True,
+            "no_warnings": True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        # Find any .vtt file dropped in sub_dir
+        vtt_files = [f for f in os.listdir(sub_dir) if f.endswith(".vtt")]
+        if vtt_files:
+            vtt_path = os.path.join(sub_dir, vtt_files[0])
+            segs = _parse_vtt(vtt_path)
+            if segs:
+                print(f">> CLIPFARMER: transcript via yt_dlp_subs ({len(segs)} segments, {vtt_files[0]})")
+                return segs, "yt_dlp_subs"
     except Exception as e:
-        print(f">> CLIPFARMER: transcript unavailable: {e}")
+        print(f">> CLIPFARMER: yt_dlp_subs failed: {e}")
+
+    # ── Tier 3: local Whisper ─────────────────────────────────────────────────
+    try:
+        import whisper
+        print(f">> CLIPFARMER: loading Whisper base model…")
+        model = whisper.load_model("base")
+        print(f">> CLIPFARMER: transcribing with Whisper…")
+        result = model.transcribe(source_path, fp16=False)
+        segs = [
+            {"text": s["text"].strip(), "start": s["start"],
+             "duration": s["end"] - s["start"]}
+            for s in result.get("segments", [])
+            if s.get("text", "").strip()
+        ]
+        if segs:
+            print(f">> CLIPFARMER: transcript via whisper ({len(segs)} segments)")
+            return segs, "whisper"
+        print(">> CLIPFARMER: Whisper returned no segments")
+    except ImportError:
+        print(">> CLIPFARMER: openai-whisper not installed — skipping Whisper fallback")
+    except Exception as e:
+        print(f">> CLIPFARMER: Whisper failed: {e}")
+
+    print(">> CLIPFARMER: no transcript available — will use equal-split")
+    return [], "none"
+
+
+def _parse_vtt(path: str) -> List[Dict]:
+    """Parse a WebVTT file into segment dicts. Returns [] on any parse failure."""
+    try:
+        segs = []
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        # Each cue block: timestamp line + text line(s)
+        cue_re = re.compile(
+            r'(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})[^\n]*\n([\s\S]*?)(?=\n\n|\Z)',
+            re.MULTILINE,
+        )
+        for m in cue_re.finditer(content):
+            start_str, end_str, text_block = m.group(1), m.group(2), m.group(3)
+            text = re.sub(r'<[^>]+>', '', text_block).strip()  # strip VTT inline tags
+            if not text or text.startswith("WEBVTT") or text.startswith("NOTE"):
+                continue
+
+            def _ts(s: str) -> float:
+                h, mi, sec = s.split(":")
+                return int(h) * 3600 + int(mi) * 60 + float(sec)
+
+            start = _ts(start_str)
+            end   = _ts(end_str)
+            segs.append({"text": text, "start": start, "duration": max(0.1, end - start)})
+        return segs
+    except Exception as e:
+        print(f">> CLIPFARMER: VTT parse failed: {e}")
         return []
 
 
@@ -427,7 +521,7 @@ def _ingest_to_bot_memory(analysis: Dict, url: str) -> List[Tuple[str, str, str]
 
 
 def _write_report(title: str, url: str, duration: int, landscape: bool,
-                  has_transcript: bool, clips_made: list,
+                  transcript_method: str, clips_made: list,
                   analysis_data: Dict, memory_log: List[Tuple[str, str, str]],
                   out_dir: str) -> str:
     """
@@ -447,7 +541,7 @@ def _write_report(title: str, url: str, duration: int, landscape: bool,
             f"**URL:** {url}  ",
             f"**Duration:** {_fmt_ts(duration)}  ",
             f"**Orientation:** {'landscape → portrait crop' if landscape else 'portrait'}  ",
-            f"**Transcript:** {'available' if has_transcript else 'unavailable — equal split used'}  ",
+            f"**Transcript:** {transcript_method}  ",
             "",
         ]
 
@@ -556,9 +650,13 @@ def farm_clips(url: str, n_clips: int = 5) -> str:
         return f"Download failed for {url}. The video may be private or geo-restricted."
     print(f">> CLIPFARMER: '{title}' ({duration}s) saved to {source}")
 
-    # 2. Transcript
-    segments = _get_segments(video_id)
+    # 2. Transcript (three-tier: youtube_api → yt_dlp_subs → whisper → none)
+    segments, transcript_method = _get_transcript(url, source)
     has_transcript = bool(segments)
+
+    # Cap clip count for very short videos (< 90s) to avoid overlapping junk
+    max_clips = max(1, duration // 25)
+    n_clips = min(n_clips, max_clips)
 
     # 3. Moment selection
     moments = []
@@ -615,7 +713,7 @@ def farm_clips(url: str, n_clips: int = 5) -> str:
             print(f">> CLIPFARMER: memory ingest skipped: {e}")
 
     report_path = _write_report(
-        title, url, duration, landscape, has_transcript,
+        title, url, duration, landscape, transcript_method,
         clips_made, analysis_data, memory_log, out_dir,
     )
     if report_path:
@@ -633,7 +731,7 @@ def farm_clips(url: str, n_clips: int = 5) -> str:
         f"Clipped {len(clips_made)} moments from '{title}'.",
         f"Folder: {out_dir}",
         f"Source: {duration}s | {'landscape → portrait crop' if landscape else 'portrait, no crop'}",
-        f"Transcript: {'used for moment selection' if has_transcript else 'unavailable — equal split used'}",
+        f"Transcript: {transcript_method}{' (used for moment selection)' if has_transcript else ' — equal split used'}",
         "",
     ]
     for i, start, end, reason in clips_made:

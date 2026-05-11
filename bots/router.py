@@ -344,7 +344,8 @@ Every agent line must be present."""
         # Clip-farmer: "clip this: URL" / "farm clips from: URL"
         _CLIP_TRIGGER_RE = _re.compile(r'\b(clip\s+this|farm\s+clips?\s+from)\b', _re.IGNORECASE)
         _YT_URL_RE = _re.search(
-            r'https?://(?:www\.)?(?:youtube\.com/watch\?[^\s]*v=|youtu\.be/)[A-Za-z0-9_-]+[^\s]*',
+            r'https?://(?:www\.)?(?:youtube\.com/watch\?[^\s]*v=|youtu\.be/'
+            r'|tiktok\.com/@[^\s/]+/video/|tiktok\.com/t/|vm\.tiktok\.com/)[A-Za-z0-9_?&=%-]+[^\s]*',
             user_msg,
         )
         if _CLIP_TRIGGER_RE.search(user_msg) and _YT_URL_RE:

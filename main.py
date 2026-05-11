@@ -625,8 +625,11 @@ async def house_websocket(websocket: WebSocket):
             # Clip-farmer commands must bypass the YouTube summarize handler
             import re as _main_re
             _CLIP_TRIGGER = _main_re.compile(r'\b(clip\s+this|farm\s+clips?\s+from)\b', _main_re.IGNORECASE)
-            _HAS_YT_URL   = _main_re.search(r'https?://(?:www\.)?(?:youtube\.com|youtu\.be)/\S+', user_msg)
-            if bot_id == "jarvisbot" and _CLIP_TRIGGER.search(user_msg) and _HAS_YT_URL:
+            _HAS_CLIP_URL = _main_re.search(
+                r'https?://(?:www\.)?(?:youtube\.com|youtu\.be|tiktok\.com|vm\.tiktok\.com)/\S+',
+                user_msg,
+            )
+            if bot_id == "jarvisbot" and _CLIP_TRIGGER.search(user_msg) and _HAS_CLIP_URL:
                 _creative_skip = True
 
             if _creative_skip:
