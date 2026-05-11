@@ -80,14 +80,29 @@ def _normalize_headline(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def _dedupe_headline_lines(lines, limit=5):
-    seen = set()
+def _headline_fingerprint(text: str):
+    import re
+    stop_words = {
+        "the", "a", "an", "and", "or", "but", "for", "to", "of", "in", "on",
+        "at", "by", "with", "from", "is", "are", "was", "were", "be", "as",
+        "has", "have", "had", "that", "this", "it", "its", "their", "his",
+        "her", "they", "them", "you", "your", "our", "after", "before",
+    }
+    normalized = _normalize_headline(text)
+    words = [w for w in re.findall(r"[a-z0-9]+", normalized) if w not in stop_words]
+    return tuple(words[:5])
+
+def _dedupe_headline_lines(lines, limit=3):
+    seen_bigrams: set = set()
     out = []
     for line in lines:
-        key = _normalize_headline(line)
-        if not key or key in seen:
+        fp = _headline_fingerprint(line)
+        if not fp:
             continue
-        seen.add(key)
+        bigrams = set(zip(fp, fp[1:]))
+        if bigrams and (bigrams & seen_bigrams):
+            continue  # topic overlaps an already-accepted headline
+        seen_bigrams.update(bigrams)
         out.append(line)
         if len(out) >= limit:
             break
@@ -114,10 +129,16 @@ async def fetch_headlines(n=5) -> str:
                 url, text = await asyncio.to_thread(fetch_source_context, src["url"])
                 lines = [l.strip() for l in text.split("\n") if len(l.strip()) > 30][:3]
                 for line in lines:
-                    headlines.append(f"{src['name']}: {line[:100]}")
+                    clean = line.strip()
+                    if len(clean) > 85:
+                        truncated = clean[:85]
+                        if " " in truncated:
+                            truncated = truncated.rsplit(" ", 1)[0]
+                        clean = truncated + "..."
+                    headlines.append(f"{src['name']}: {clean}")
             except Exception:
                 pass
-        unique = _dedupe_headline_lines(headlines, n)
+        unique = _dedupe_headline_lines(headlines, min(n, 3))
         return "\n".join([f"{i+1}. {h}" for i, h in enumerate(unique)])
     except Exception as e:
         return f"Headlines unavailable: {e}"
@@ -127,7 +148,7 @@ async def _get_pinkslip_brief() -> str:
         import sys
         sys.path.insert(0, "/Users/higabot1/jarvis1-1")
         from pinkslip_odds import get_all_default
-        return await get_all_default(limit_per_sport=2)
+        return await get_all_default(limit_per_sport=1)
     except Exception as e:
         print(f">> PINKSLIP BRIEF ERROR: {e}")
         return ""
@@ -189,30 +210,100 @@ def _section_headlines(headlines_str: str) -> str:
 def _section_pinkslip(pinkslip_str: str) -> str:
     if not pinkslip_str or not pinkslip_str.strip():
         return ""
-    return "🎯 *PINKSLIP*\n" + pinkslip_str.strip()
+    import re as _re
+    items = []
+    current_sport = ""
+    for line in pinkslip_str.splitlines():
+        line = line.strip()
+        m = _re.match(r'^\*([a-z_]+)\*$', line)
+        if m:
+            # Humanize: americanfootball_nfl → NFL, basketball_nba → NBA
+            parts = m.group(1).split("_")
+            current_sport = parts[-1].upper()
+        elif line.startswith("• ") and current_sport:
+            matchup = line[2:].split(" — ")[0]   # drop odds, keep teams
+            items.append(f"*{current_sport}*: {matchup}")
+            current_sport = ""  # one game per sport, then move on
+            if len(items) >= 2:
+                break
+    if not items:
+        return ""
+    return "🎯 *PINKSLIP*\n" + "\n".join(items)
 
 
-def _section_bots() -> str:
-    lines = ["🤖 *BOT STATUS*"]
-    try:
-        import sys as _sys
-        _sys.path.insert(0, "/Users/higabot1/jarvis1-1")
-        from bot_orchestrator import orchestrator
-        statuses = orchestrator.get_all_statuses()
-        key_bots = ["jarvisbot", "stockbot", "cryptoid", "pinkslip",
-                    "robowright", "jamz", "higashop", "teacherbot"]
-        row: list = []
-        for bot_id in key_bots:
-            if bot_id in statuses:
-                s = statuses[bot_id]
-                row.append(f"{s['icon']} {s['name']}: {s['status']}")
-            if len(row) == 3:
-                lines.append(" | ".join(row))
-                row = []
-        if row:
-            lines.append(" | ".join(row))
-    except Exception as e:
-        lines.append(f"_Bot status unavailable_")
+def _extract_briefing_context(portfolio: dict, headlines_str: str):
+    lines = [l.strip() for l in (headlines_str or "").splitlines() if l.strip()]
+    top_headline = ""
+    if lines:
+        top_headline = lines[0]
+        top_headline = top_headline.split(". ", 1)[1] if ". " in top_headline else top_headline
+        top_headline = top_headline.split(": ", 1)[1] if ": " in top_headline else top_headline
+
+    positions = list(portfolio.get("positions", [])) if portfolio else []
+    best_pos = ""
+    worst_pos = ""
+    if positions:
+        best = max(positions, key=lambda p: p.get("pl", 0))
+        worst = min(positions, key=lambda p: p.get("pl", 0))
+        best_pos = f"{best.get('symbol', '?')} {best.get('pl', 0):+,.2f}"
+        worst_pos = f"{worst.get('symbol', '?')} {worst.get('pl', 0):+,.2f}"
+    return top_headline, best_pos, worst_pos
+
+
+def _section_bot_pulse(statuses: dict, portfolio: dict, crypto_total: float,
+                       prices: dict, top_headline: str, pinkslip_str: str) -> str:
+    def _task_for(bot_id: str) -> str:
+        data = statuses.get(bot_id, {})
+        task = str(data.get("current_task", "") or "").strip()
+        if task in {"Waiting for next task.", "Monitoring system health."}:
+            task = ""
+        return task
+
+    def _first_pick(text: str) -> str:
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("• "):
+                return line[2:]
+        return ""
+
+    lines = ["🤖 *BOT PULSE*"]
+    equity = portfolio.get("equity", 0) if portfolio else 0
+    day_pl = portfolio.get("day_pl", 0) if portfolio else 0
+    stock_line = f"Equity `${equity:,.2f}` | Day `{day_pl:+,.2f}`"
+    crypto_parts = [f"{k} `${v:,.0f}`" for k, v in prices.items()] if prices else [f"Total `${crypto_total:,.2f}`"]
+    pink_pick = _first_pick(pinkslip_str)
+
+    # Compress top_headline to a short topic anchor (first 5 words)
+    if top_headline:
+        words = top_headline.split()
+        topic = " ".join(words[:5]) + ("..." if len(words) > 5 else "")
+    else:
+        topic = "No dominant signal"
+
+    # PINKSLIP: show matchup only, strip odds
+    if pink_pick:
+        matchup = pink_pick.split(" — ")[0] if " — " in pink_pick else pink_pick
+        pink_line = f"Board: {matchup}"
+    else:
+        pink_line = "No standout line on the board."
+
+    contributions = [
+        ("jarvisbot", f"Tracking: {topic}"),
+        ("stockbot", f"Portfolio posture: {stock_line}"),
+        ("cryptoid", f"Crypto posture: {' | '.join(crypto_parts)}"),
+        ("pinkslip", pink_line),
+        ("robowright", "Content angle: top headline → fast explainer clip."),
+        ("jamz", "Mood bed: tense, minimal, low-distract for briefing mode."),
+    ]
+
+    for bot_id, fallback in contributions:
+        data = statuses.get(bot_id, {})
+        icon = data.get("icon", "•")
+        name = data.get("name", bot_id.upper())
+        pulse = _task_for(bot_id) or fallback
+        if len(pulse) > 95:
+            pulse = pulse[:95].rsplit(" ", 1)[0] + "..."
+        lines.append(f"{icon} *{name}*: {pulse}")
     return "\n".join(lines)
 
 
@@ -237,15 +328,14 @@ async def _build_top_of_mind(portfolio: dict, crypto_total: float, prices: dict,
     equity    = portfolio.get("equity", 0)
     day_pl    = portfolio.get("day_pl", 0)
     price_str = ", ".join(f"{k}: ${v:,.2f}" for k, v in prices.items()) if prices else "unavailable"
-    head_lines = [l.strip() for l in (headlines_str or "").split("\n") if l.strip()][:3]
-    head_ctx   = "; ".join(head_lines) if head_lines else "no headlines"
+    top_headline, best_pos, worst_pos = _extract_briefing_context(portfolio, headlines_str)
 
     prompt = (
-        f"You are J.A.R.V.I.S. Write exactly 2 sentences: a {time_of_day} market thesis for the commander.\n"
-        f"Stocks equity: ${equity:,.2f} | Day P/L: {day_pl:+,.2f}\n"
-        f"Crypto total: ${crypto_total:,.2f} | {price_str}\n"
-        f"Top news: {head_ctx}\n\n"
-        f"Sentence 1: state the dominant theme. Sentence 2: one clear action or key watch. "
+        f"You are J.A.R.V.I.S. Write exactly 2 sentences for a {time_of_day} command briefing.\n"
+        f"Dominant news: {top_headline or 'No major headline available'}\n"
+        f"Portfolio: ${equity:,.2f} equity | day P/L {day_pl:+,.2f} | best {best_pos or 'n/a'} | worst {worst_pos or 'n/a'}\n"
+        f"Crypto: ${crypto_total:,.2f} total | {price_str}\n"
+        f"Sentence 1: lead with the news theme and market implication. Sentence 2: tie it to portfolio posture and one clear watch. "
         f"No bullet points. No asterisks. No markdown. Plain prose only."
     )
     try:
@@ -254,18 +344,28 @@ async def _build_top_of_mind(portfolio: dict, crypto_total: float, prices: dict,
             resp = await h.post(OLLAMA_URL, json={"model": MODEL, "prompt": prompt, "stream": False})
             if resp.status_code == 200:
                 text = resp.json().get("response", "").strip().replace("\n", " ")
-                sentences = _re.split(r'(?<=[.!?])\s+', text)
-                result = " ".join(sentences[:2]).strip()
-                if len(result) > 20:
-                    return result
+                # Split on sentence boundary followed by a capital letter
+                sentences = [s.strip() for s in _re.split(r'(?<=[.!?])\s+(?=[A-Z])', text) if s.strip()]
+                if len(sentences) >= 2:
+                    return sentences[0] + " " + sentences[1]
+                if len(sentences) == 1 and len(sentences[0]) > 20:
+                    # Ollama gave only one sentence — build a deterministic second
+                    if best_pos and day_pl < 0:
+                        s2 = f"Watch {worst_pos} for continued pressure and consider trimming before it costs more."
+                    elif best_pos:
+                        s2 = f"Your strongest name is {best_pos} — let it run, but keep stops tight."
+                    else:
+                        s2 = f"Portfolio is at ${equity:,.2f} equity — hold position and review after the open."
+                    return sentences[0] + " " + s2
     except Exception as e:
         print(f">> TOP OF MIND ERROR: {e}")
 
     direction = "positive" if day_pl >= 0 else "negative"
-    return (
-        f"Portfolio tracking {direction} at ${equity:,.2f} equity into the {time_of_day} session. "
-        f"Monitor key positions and news flow for actionable signals."
-    )
+    news = top_headline or "Headline flow is mixed"
+    s2 = (f"Your best name is {best_pos} — stay the course." if best_pos and day_pl >= 0
+          else f"Watch {worst_pos} closely before adding exposure." if worst_pos
+          else f"Hold at ${equity:,.2f} equity and monitor the tape.")
+    return f"{news}. {s2}"
 
 
 # ── Main briefing entry point ─────────────────────────────────────────────────
@@ -278,7 +378,7 @@ async def generate_briefing(time_of_day: str) -> str:
     prices, portfolio, headlines = await asyncio.gather(
         get_crypto_prices(),
         get_alpaca_portfolio(),
-        fetch_headlines(5),
+        fetch_headlines(3),
     )
     pinkslip_str = await _get_pinkslip_brief()
 
@@ -293,6 +393,16 @@ async def generate_briefing(time_of_day: str) -> str:
     except Exception:
         health_line = "Code health unknown"
 
+    try:
+        import sys as _sys
+        _sys.path.insert(0, "/Users/higabot1/jarvis1-1")
+        from bot_orchestrator import orchestrator
+        statuses = orchestrator.get_all_statuses()
+    except Exception:
+        statuses = {}
+
+    top_headline, _, _ = _extract_briefing_context(portfolio, headlines)
+
     # Single LLM call — TOP OF MIND only
     top_of_mind = await _build_top_of_mind(portfolio, crypto_total, prices, headlines, time_of_day)
 
@@ -303,7 +413,7 @@ async def generate_briefing(time_of_day: str) -> str:
     s_crypto    = _section_crypto(crypto_total, crypto_lines, wb_crypto, cb_total, kr_equity, prices)
     s_headlines = _section_headlines(headlines)
     s_pinkslip  = _section_pinkslip(pinkslip_str)
-    s_bots      = _section_bots()
+    s_bots      = _section_bot_pulse(statuses, portfolio, crypto_total, prices, top_headline, pinkslip_str)
     s_system    = _section_system(cpu, ram_used, ram_total, disk, health_line)
     s_close     = _section_close(time_of_day)
 
