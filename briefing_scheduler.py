@@ -132,122 +132,192 @@ async def _get_pinkslip_brief() -> str:
         print(f">> PINKSLIP BRIEF ERROR: {e}")
         return ""
 
-async def generate_briefing(time_of_day):
-    now = datetime.now().strftime('%B %d, %Y — %I:%M %p CST')
-    is_morning = time_of_day == "morning"
-    market_note = "Markets open 9:30 AM ET. Standing by, sir." if is_morning else "Markets closed. Review complete. Standing by, sir."
-    icon = "🌅" if is_morning else "🌆"
+# ── Section divider ───────────────────────────────────────────────────────────
+_DIV = "━━━━━━━━━━━━━━━━"
 
-    # Fetch all data in parallel where possible
-    prices    = await get_crypto_prices()
-    portfolio = await get_alpaca_portfolio()
-    cpu, ram_used, ram_total, disk = get_system_stats()
-    crypto_total, crypto_lines, wb_crypto, cb_total, kr_equity = get_real_crypto()
-    headlines = await fetch_headlines(5)
-    pinkslip_section = await _get_pinkslip_brief()
 
-    # Build position strings
-    pos_lines = ""
+# ── Deterministic section builders ────────────────────────────────────────────
+
+def _section_header(icon: str, time_of_day: str, now: str) -> str:
+    return f"{icon} *J.A.R.V.I.S. {time_of_day.upper()} BRIEFING*\n_{now}_"
+
+
+def _section_portfolio(portfolio: dict) -> str:
+    lines = ["💰 *PORTFOLIO*"]
+    if not portfolio:
+        lines.append("_Portfolio data unavailable_")
+        return "\n".join(lines)
+    equity       = portfolio.get("equity", 0)
+    day_pl       = portfolio.get("day_pl", 0)
+    buying_power = portfolio.get("buying_power", 0)
+    pl_icon      = "📈" if day_pl >= 0 else "📉"
+    lines.append(
+        f"Stocks: `${equity:,.2f}` | Day P/L: `{day_pl:+,.2f}` {pl_icon} | Cash: `${buying_power:,.2f}`"
+    )
+    lines.append("Acorns: `$454.36` _(static)_")
     for p in portfolio.get("positions", []):
         emoji = "🟢" if p["pl"] >= 0 else "🔴"
-        pos_lines += f"{emoji} {p['symbol']}: ${p['value']:,.2f} (P/L: ${p['pl']:+,.2f})\n"
+        lines.append(f"{emoji} {p['symbol']}: `${p['value']:,.2f}` ({p['pl']:+,.2f})")
+    return "\n".join(lines)
 
-    price_str = ", ".join([f"{k}: ${v:,.2f}" for k, v in prices.items()]) if prices else "Unavailable"
 
-    total_portfolio = portfolio.get('equity', 0) + crypto_total + 454.36  # Acorns static
-    day_pl_icon = "📈" if portfolio.get('day_pl', 0) >= 0 else "📉"
+def _section_crypto(crypto_total: float, crypto_lines: str, wb_crypto: float,
+                    cb_total: float, kr_equity: float, prices: dict) -> str:
+    lines = [f"🪙 *CRYPTO* — `${crypto_total:,.2f} total`"]
+    for line in (crypto_lines or "").splitlines():
+        line = line.strip()
+        if line:
+            lines.append(f"  {line}")
+    lines.append(
+        f"Webull `${wb_crypto:.2f}` | Coinbase `${cb_total:.2f}` | Kraken `${kr_equity:.2f}`"
+    )
+    if prices:
+        price_parts = [f"{k} `${v:,.2f}`" for k, v in prices.items()]
+        lines.append("Spot: " + " | ".join(price_parts))
+    return "\n".join(lines)
 
-    prompt = f"""You are J.A.R.V.I.S. generating a {time_of_day.upper()} BRIEFING for Higa House.
-Use ONLY the real data provided below. No invented numbers. No placeholders.
 
---- LIVE DATA ---
-TOTAL PORTFOLIO: ~${total_portfolio:,.2f}
-  Stocks equity: ${portfolio.get('equity', 0):,.2f} | Day P/L: {portfolio.get('day_pl', 0):+,.2f} {day_pl_icon} | Buying Power: ${portfolio.get('buying_power', 0):,.2f}
-  Crypto total: ${crypto_total:.2f} | Acorns: $454.36
+def _section_headlines(headlines_str: str) -> str:
+    lines = ["📰 *HEADLINES*"]
+    if not headlines_str or "unavailable" in headlines_str.lower():
+        lines.append("_Headlines unavailable_")
+    else:
+        lines.append(headlines_str)
+    return "\n".join(lines)
 
-STOCK POSITIONS:
-{pos_lines}
-CRYPTO POSITIONS (use these exact numbers):
-{crypto_lines}
-  Broker breakdown — Webull: ${wb_crypto:.2f} | Coinbase: ${cb_total:.2f} | Kraken: ${kr_equity:.2f}
 
-LIVE CRYPTO PRICES: {price_str}
-SYSTEM: CPU {cpu:.0f}% | RAM {ram_used:.1f}GB/{ram_total:.1f}GB | Disk {disk:.0f}%
----
+def _section_pinkslip(pinkslip_str: str) -> str:
+    if not pinkslip_str or not pinkslip_str.strip():
+        return ""
+    return "🎯 *PINKSLIP*\n" + pinkslip_str.strip()
 
-Format the briefing EXACTLY like this. Use the real data above. No placeholders:
 
-{icon} J.A.R.V.I.S. {time_of_day.upper()} BRIEFING
-{now}
+def _section_bots() -> str:
+    lines = ["🤖 *BOT STATUS*"]
+    try:
+        import sys as _sys
+        _sys.path.insert(0, "/Users/higabot1/jarvis1-1")
+        from bot_orchestrator import orchestrator
+        statuses = orchestrator.get_all_statuses()
+        key_bots = ["jarvisbot", "stockbot", "cryptoid", "pinkslip",
+                    "robowright", "jamz", "higashop", "teacherbot"]
+        row: list = []
+        for bot_id in key_bots:
+            if bot_id in statuses:
+                s = statuses[bot_id]
+                row.append(f"{s['icon']} {s['name']}: {s['status']}")
+            if len(row) == 3:
+                lines.append(" | ".join(row))
+                row = []
+        if row:
+            lines.append(" | ".join(row))
+    except Exception as e:
+        lines.append(f"_Bot status unavailable_")
+    return "\n".join(lines)
 
-⚙️ SYSTEM: [1 sentence system status]
 
-📈 STOCKBOT: [1-3 sentences. Which stocks are up/down, any sell signals, buying power status.]
+def _section_system(cpu: float, ram_used: float, ram_total: float,
+                    disk: float, health_line: str) -> str:
+    return (
+        f"⚙️ *SYSTEM*\n"
+        f"CPU `{cpu:.0f}%` | RAM `{ram_used:.1f}/{ram_total:.1f}GB` | Disk `{disk:.0f}%`\n"
+        f"🔧 {health_line}"
+    )
 
-📊 CRYPTO: [MANDATORY - use the REAL CRYPTO PORTFOLIO data above. Write: total value, each coin with P/L, hold/reduce call. Example: "BTC $140.07 (+$56.46), ETH $74.31 (-$25.69), SOL $189.61 (-$44.38). Hold BTC, reduce SOL." Do NOT skip this section.]
 
-📰 HEADLINES:
-{headlines}
+def _section_close(time_of_day: str) -> str:
+    if time_of_day == "morning":
+        return "_Markets open 9:30 AM ET. All systems go. Standing by, sir._"
+    return "_Markets closed. Review complete. Positions locked. Standing by, sir._"
 
-🔒 ULTRON: [1 sentence security status]
 
-📺 ROBOWRIGHT: [1 sentence — any content opportunities or "No update."]
+async def _build_top_of_mind(portfolio: dict, crypto_total: float, prices: dict,
+                              headlines_str: str, time_of_day: str) -> str:
+    """One short Ollama call: 2-sentence market thesis. Deterministic fallback on failure."""
+    equity    = portfolio.get("equity", 0)
+    day_pl    = portfolio.get("day_pl", 0)
+    price_str = ", ".join(f"{k}: ${v:,.2f}" for k, v in prices.items()) if prices else "unavailable"
+    head_lines = [l.strip() for l in (headlines_str or "").split("\n") if l.strip()][:3]
+    head_ctx   = "; ".join(head_lines) if head_lines else "no headlines"
 
-🎵 JAMZ: [1 sentence — any music activity or "No update."]
+    prompt = (
+        f"You are J.A.R.V.I.S. Write exactly 2 sentences: a {time_of_day} market thesis for the commander.\n"
+        f"Stocks equity: ${equity:,.2f} | Day P/L: {day_pl:+,.2f}\n"
+        f"Crypto total: ${crypto_total:,.2f} | {price_str}\n"
+        f"Top news: {head_ctx}\n\n"
+        f"Sentence 1: state the dominant theme. Sentence 2: one clear action or key watch. "
+        f"No bullet points. No asterisks. No markdown. Plain prose only."
+    )
+    try:
+        import re as _re
+        async with httpx.AsyncClient(timeout=45) as h:
+            resp = await h.post(OLLAMA_URL, json={"model": MODEL, "prompt": prompt, "stream": False})
+            if resp.status_code == 200:
+                text = resp.json().get("response", "").strip().replace("\n", " ")
+                sentences = _re.split(r'(?<=[.!?])\s+', text)
+                result = " ".join(sentences[:2]).strip()
+                if len(result) > 20:
+                    return result
+    except Exception as e:
+        print(f">> TOP OF MIND ERROR: {e}")
 
-🛍️ HIGASHOP: [1 sentence — shop status or "No update."]
+    direction = "positive" if day_pl >= 0 else "negative"
+    return (
+        f"Portfolio tracking {direction} at ${equity:,.2f} equity into the {time_of_day} session. "
+        f"Monitor key positions and news flow for actionable signals."
+    )
 
-🖥️ TECHNOID: [1 sentence — hardware status]
 
-{market_note}"""
+# ── Main briefing entry point ─────────────────────────────────────────────────
 
-    # Add code health to briefing
+async def generate_briefing(time_of_day: str) -> str:
+    now        = datetime.now().strftime('%B %d, %Y — %I:%M %p CST')
+    icon       = "🌅" if time_of_day == "morning" else "🌆"
+
+    # Fetch all data — parallel where possible
+    prices, portfolio, headlines = await asyncio.gather(
+        get_crypto_prices(),
+        get_alpaca_portfolio(),
+        fetch_headlines(5),
+    )
+    pinkslip_str = await _get_pinkslip_brief()
+
+    cpu, ram_used, ram_total, disk = get_system_stats()
+    crypto_total, crypto_lines, wb_crypto, cb_total, kr_equity = get_real_crypto()
+
+    # Code health (sync, fast)
     try:
         from bots.doctorbot import scan_for_bugs
-        health = scan_for_bugs()
-        health_line = "✅ All files compile clean." if "All" in health and "clean" in health else f"⚠️ Code issues detected: {health[:100]}"
+        health      = scan_for_bugs()
+        health_line = "Code ✅ all clean" if ("All" in health and "clean" in health) else f"⚠️ Issues: {health[:80]}"
     except Exception:
-        health_line = "Code health: unknown"
+        health_line = "Code health unknown"
 
-    # Add a draft idea
-    try:
-        import random
-        draft_ideas = [
-            "💡 Draft idea: wire Teacherbot to full curriculum tracker",
-            "💡 Draft idea: add voice input via Whisper to JARVIS",
-            "💡 Draft idea: add weatherbot to HIGA HOUSE",
-            "💡 Draft idea: Etsy API integration for HIGASHOP",
-            "💡 Draft idea: add PINKSLIP to 5AM briefing with top picks",
-            "💡 Draft idea: wire all bots to Obsidian daily log",
-        ]
-        draft_idea = random.choice(draft_ideas)
-    except Exception:
-        draft_idea = ""
+    # Single LLM call — TOP OF MIND only
+    top_of_mind = await _build_top_of_mind(portfolio, crypto_total, prices, headlines, time_of_day)
 
-    try:
-        async with httpx.AsyncClient(timeout=180) as h:
-            resp = await h.post(OLLAMA_URL, json={"model": MODEL, "prompt": prompt, "stream": False})
-            briefing = resp.json().get("response", "Neural link error, sir.")
+    # Build all sections
+    s_header    = _section_header(icon, time_of_day, now)
+    s_tom       = f"🧠 *TOP OF MIND*\n{top_of_mind}"
+    s_portfolio = _section_portfolio(portfolio)
+    s_crypto    = _section_crypto(crypto_total, crypto_lines, wb_crypto, cb_total, kr_equity, prices)
+    s_headlines = _section_headlines(headlines)
+    s_pinkslip  = _section_pinkslip(pinkslip_str)
+    s_bots      = _section_bots()
+    s_system    = _section_system(cpu, ram_used, ram_total, disk, health_line)
+    s_close     = _section_close(time_of_day)
 
-            # Force inject crypto if Ollama left it blank
-            if "📊 CRYPTO" in briefing and crypto_total > 0:
-                crypto_section = f"""📊 CRYPTO (Total: ${crypto_total:.2f})
-{crypto_lines}
-  Webull: ${wb_crypto:.2f} | Coinbase: ${cb_total:.2f} | Kraken: ${kr_equity:.2f}
-  Live prices — {price_str}"""
-                briefing = briefing.replace("📊 CRYPTO", crypto_section)
+    # Assemble with dividers
+    _SEP = f"\n{_DIV}\n"
+    blocks = [s_header, s_tom, s_portfolio, s_crypto, s_headlines]
+    if s_pinkslip:
+        blocks.append(s_pinkslip)
+    blocks.extend([s_bots, s_system])
 
-            # Append code health and draft idea to briefing
-            briefing += f"\n\n🔧 CODE: {health_line}"
-            if draft_idea:
-                briefing += f"\n{draft_idea}"
-            if pinkslip_section:
-                briefing += f"\n\n🎯 PINKSLIP TOP PICKS:\n{pinkslip_section}"
-            print(f"\n{briefing}\n")
-            return briefing
-    except Exception as e:
-        print(f">> BRIEFING ERROR: {e}")
-        return ""
+    briefing = _SEP.join(blocks) + f"\n{_DIV}\n{s_close}"
+
+    print(f"\n{briefing}\n")
+    return briefing
 
 def morning_briefing():
     print("\n🌅 Generating morning briefing...")
