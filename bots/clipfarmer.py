@@ -305,6 +305,39 @@ def _detect_relevant_bots(transcript_text: str) -> List[str]:
     return bots
 
 
+def _analysis_fallback(analysis: dict, segments: List[Dict]) -> dict:
+    """
+    Fill empty analysis fields from raw transcript text.
+    Only touches fields that Ollama left blank — populated fields are unchanged.
+    """
+    transcript_text = " ".join(
+        s.get("text", "").strip() for s in segments if s.get("text")
+    ).strip()
+    if not transcript_text:
+        return analysis
+
+    # Summary: first 2-3 meaningful sentences
+    if not analysis.get("summary"):
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', transcript_text)
+                     if len(s.strip()) > 15]
+        analysis["summary"] = " ".join(sentences[:3])[:400]
+
+    # Key insights: up to 3 distinct transcript sentences
+    if not analysis.get("key_insights"):
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', transcript_text)
+                     if len(s.strip()) > 20]
+        analysis["key_insights"] = sentences[:3]
+
+    # Bot tags: minimal entry for jarvisbot and robowright if still empty
+    bot_tags = analysis.get("bot_tags", {})
+    snippet = transcript_text[:200]
+    for bot_id, angle in (("jarvisbot", "general clip"), ("robowright", "content strategy")):
+        if bot_id in bot_tags and not bot_tags[bot_id]:
+            bot_tags[bot_id] = [{"start_sec": 0, "end_sec": 0, "angle": angle, "note": snippet}]
+    analysis["bot_tags"] = bot_tags
+    return analysis
+
+
 def _analyze_clips(segments: List[Dict], moments: List[Dict], title: str,
                    url: str, duration: int, out_dir: str, bots: List[str]) -> bool:
     """
@@ -354,7 +387,7 @@ Use integer seconds. Include 3-5 important sections and 2-3 tags per bot."""
     try:
         import httpx
         r = httpx.post(OLLAMA_URL,
-                       json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+                       json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False, "think": False},
                        timeout=120.0)
         print(f">> CLIPFARMER ANALYZE: Ollama status={r.status_code}")
         if r.status_code == 200:
@@ -391,6 +424,16 @@ Use integer seconds. Include 3-5 important sections and 2-3 tags per bot."""
         "bot_tags": data.get("bot_tags", {b: [] for b in bots}) if data else {b: [] for b in bots},
     }
     print(f">> CLIPFARMER ANALYZE: analysis dict built — ollama_data={'yes' if data else 'no (fallback empty)'}")
+
+    # Apply deterministic fallback if Ollama returned sparse output
+    _is_sparse = (
+        not analysis["summary"]
+        or not analysis["key_insights"]
+        or not any(analysis["bot_tags"].values())
+    )
+    if _is_sparse:
+        analysis = _analysis_fallback(analysis, segments)
+        print(">> CLIPFARMER ANALYZE: sparse Ollama output — deterministic fallback applied")
 
     analysis_json_path = os.path.join(out_dir, "analysis.json")
     analysis_md_path   = os.path.join(out_dir, "analysis.md")
