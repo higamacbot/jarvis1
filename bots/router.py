@@ -780,6 +780,55 @@ Broker Breakdown:
             theme = user_msg[6:].strip()
             from bots.robowright_media import batch_content_plan
             return await batch_content_plan(theme)
+        elif (q.startswith("carousel ")
+              or q.startswith("make a carousel")
+              or q.startswith("make carousel")
+              or q.startswith("storyboard ")
+              or "turn this transcript into a carousel" in q
+              or "turn transcript into a carousel" in q):
+            _platform = "tiktok" if "tiktok" in q else "instagram"
+            _n_slides = 6 if q.startswith("storyboard") else 7
+            _task_type = "storyboard" if q.startswith("storyboard") else "carousel"
+            _content = user_msg
+            for _pfx in (
+                "make a carousel about ", "make a carousel ",
+                "make carousel about ", "make carousel ",
+                "carousel ", "storyboard ",
+                "turn this transcript into a carousel: ",
+                "turn this transcript into a carousel",
+                "turn transcript into a carousel: ",
+                "turn transcript into a carousel",
+            ):
+                if q.startswith(_pfx):
+                    _content = user_msg[len(_pfx):].strip()
+                    break
+            _transcript = _content if (len(_content) > 200 or "\n" in _content) else ""
+            _topic = (_content.split("\n")[0][:80] if _transcript else _content) or "untitled"
+            _context_hint = ""
+            try:
+                from loop_memory import find_similar_pattern
+                _patterns = find_similar_pattern("robowright", _task_type, _content, n=2)
+                if _patterns:
+                    _context_hint = "\n".join(
+                        f"- Input: {str(p.get('input_sample', '')).strip()} | Output: {str(p.get('output_sample', '')).strip()}"
+                        for p in _patterns
+                    )
+            except Exception as e:
+                print(f">> ROBOWRIGHT ROUTER: pattern lookup failed: {e}")
+            from bots.robowright_media import make_carousel
+            _result = await make_carousel(
+                _topic,
+                n_slides=_n_slides,
+                platform=_platform,
+                transcript=_transcript,
+                context_hint=_context_hint,
+            )
+            try:
+                from loop_memory import save_pattern
+                save_pattern("robowright", _task_type, _content, _result)
+            except Exception as e:
+                print(f">> ROBOWRIGHT ROUTER: pattern save failed: {e}")
+            return _result
         elif q.startswith("trending audio"):
             niche = user_msg[14:].strip() or "finance"
             from bots.robowright_media import find_trending_audio

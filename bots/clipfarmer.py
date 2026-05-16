@@ -563,6 +563,47 @@ def _ingest_to_bot_memory(analysis: Dict, url: str) -> List[Tuple[str, str, str]
     return memory_log
 
 
+def _emit_robowright_handoff(analysis: Dict) -> bool:
+    """Save a lightweight handoff when a clip looks reusable for content packaging."""
+    summary = str(analysis.get("summary", "")).strip()
+    insights = [str(item).strip() for item in (analysis.get("key_insights", []) or []) if str(item).strip()]
+    robowright_tags = (analysis.get("bot_tags", {}) or {}).get("robowright", []) or []
+    if not (summary or insights or robowright_tags):
+        return False
+
+    lines = []
+    if summary:
+        lines.append(f"Summary: {summary}")
+    if insights:
+        lines.append("Key insights:")
+        lines.extend(f"- {item}" for item in insights[:3])
+    for tag in robowright_tags[:2]:
+        angle = str(tag.get("angle", "")).strip()
+        note = str(tag.get("note", "")).strip()
+        detail = " — ".join(part for part in (angle, note) if part)
+        if detail:
+            lines.append(f"Robowright angle: {detail}")
+
+    context = "\n".join(lines).strip()
+    if not context:
+        return False
+
+    try:
+        from loop_memory import save_handoff
+        save_handoff(
+            from_bot="clipfarmer",
+            to_bot="robowright",
+            topic=str(analysis.get("title", "untitled")).strip(),
+            context=context,
+            suggested_action="make_carousel",
+        )
+        print(">> CLIPFARMER HANDOFF: saved handoff for robowright")
+        return True
+    except Exception as e:
+        print(f">> CLIPFARMER HANDOFF: save failed: {e}")
+        return False
+
+
 def _write_report(title: str, url: str, duration: int, landscape: bool,
                   transcript_method: str, clips_made: list,
                   analysis_data: Dict, memory_log: List[Tuple[str, str, str]],
@@ -750,6 +791,7 @@ def farm_clips(url: str, n_clips: int = 5) -> str:
             memory_log = _ingest_to_bot_memory(analysis_data, url)
             saved_count = sum(1 for _, s, _ in memory_log if s == "saved")
             print(f">> CLIPFARMER MEMORY: total saved = {saved_count}")
+            _emit_robowright_handoff(analysis_data)
             if saved_count:
                 artifact_note += f"\n  {saved_count} bot memory entries written"
         except Exception as e:
