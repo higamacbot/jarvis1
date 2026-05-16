@@ -77,7 +77,68 @@ async def ask_ollama(user_msg, extra=""):
     market_str = ", ".join([f"{k}: ${v}" for k,v in crypto.items()]) or "unavailable"
     pos_str = ", ".join([f"{p['symbol']} ${p['value']} ({p['pl']})" for p in portfolio.get("positions",[])]) or "none"
     portfolio_str = f"Equity: ${portfolio.get('equity','?')} | Day P/L: {portfolio.get('day_pl','?')} | Buying Power: ${portfolio.get('buying_power','?')} | Positions: {pos_str}" if portfolio else "offline"
+    try:
+        import memory as _mem
+        memory_bundle = await asyncio.to_thread(_mem.build_memory_bundle, user_msg)
+    except Exception:
+        memory_bundle = {}
+    rule_block = memory_bundle.get("rules", "")
+    semantic_block = memory_bundle.get("semantic", "")
+    recent_block = memory_bundle.get("recent", "")
+    _is_mem_query = bool(memory_bundle.get("is_rule_query"))
+    _msg_lc = user_msg.lower().strip()
+
+    # ── Intent: memory planting ────────────────────────────────────────────────
+    _is_question = _msg_lc.endswith("?") or _msg_lc.startswith(
+        ("what ", "is ", "do i ", "tell me", "how ", "why ", "when ", "where ")
+    )
+    if (not extra and not _is_question
+            and any(p in _msg_lc for p in _mem.RULE_MEMORY_TRIGGERS)):
+        return "Understood, sir. I've noted that and stored it."
+
+    # ── Intent: pure rule recall ───────────────────────────────────────────────
+    _PORTFOLIO_WORDS = (
+        "in my portfolio", "currently hold", "do i hold", "do i have",
+        "my positions", "my holdings", "portfolio doing",
+    )
+    if (_is_mem_query and not extra
+            and not any(w in _msg_lc for w in _PORTFOLIO_WORDS)):
+        retrieved = "\n".join(filter(None, [rule_block, semantic_block]))
+        if retrieved:
+            recall_prompt = (
+                "You are J.A.R.V.I.S. The user is asking about a stored rule or preference.\n"
+                f"Stored rules:\n{retrieved}\n\n"
+                f"Question: {user_msg}\n"
+                "Answer in 1-2 sentences. State the rule directly. "
+                "Do not use a briefing header or section label. "
+                "Do not end with 'no further action required', 'may I assist', or similar closings. "
+                "Do not comment on current portfolio or market state.\nJARVIS:"
+            )
+            try:
+                async with httpx.AsyncClient(timeout=60) as c:
+                    r = await c.post(OLLAMA_URL, json={"model": MODEL, "prompt": recall_prompt, "stream": False})
+                    return r.json().get("response", "Neural error, sir.").strip()
+            except Exception as e:
+                return f"Ollama offline: {e}"
+        return "I don't have a stored rule for that, sir. State it and I'll remember it."
+
+    # ── General path ───────────────────────────────────────────────────────────
+    mem_hint = (
+        "[RULE QUERY] The user is asking about a stored rule or preference.\n"
+        "Answer format: state the rule from USER RULES directly and concisely.\n"
+        "Do NOT mention whether the asset is currently in the portfolio.\n"
+        "Do NOT say 'no action required', 'not applicable', or 'not currently held'.\n"
+        "Do NOT blend in live portfolio commentary unless the user also asked about current holdings.\n"
+        if _is_mem_query else ""
+    )
     prompt = f"""You are J.A.R.V.I.S., a highly intelligent AI. British wit. Direct. Never invent data.
+USER RULES (stored instructions — override portfolio state for rule/preference queries):
+{rule_block if rule_block else "(none retrieved)"}
+RETRIEVED MEMORY:
+{semantic_block if semantic_block else "(none retrieved)"}
+RECENT CONTEXT:
+{recent_block if recent_block else "(none retrieved)"}
+{mem_hint}
 LIVE DATA:
 CRYPTO: {market_str}
 PORTFOLIO: {portfolio_str}
@@ -238,6 +299,11 @@ async def handle_message(update, context):
     user_msg = update.message.text.strip()
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     portfolio = await get_portfolio()
+    try:
+        import memory as mem
+        await asyncio.to_thread(mem.save_explicit_user_memory, user_msg)
+    except Exception:
+        pass
 
     # ── Indicator path ────────────────────────────────────────────────────
     indicator = await handle_indicators(user_msg, portfolio.get("positions", []))
@@ -258,7 +324,9 @@ async def handle_message(update, context):
     reply = await ask_ollama(user_msg)
     try:
         import memory as mem
-        mem.save_conversation(user_msg, mem.extract_summary(reply))
+        mem.save_conversation("user", user_msg)
+        mem.save_conversation("jarvis", mem.extract_summary(reply))
+        await asyncio.to_thread(mem.mem0_add, user_msg, mem.extract_summary(reply))
     except: pass
     await send_msg(context.bot, update.effective_chat.id, reply)
 

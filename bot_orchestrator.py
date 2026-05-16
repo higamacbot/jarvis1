@@ -289,6 +289,60 @@ class BotOrchestrator:
             for row in rows
         ]
 
+    def get_health_summary(self) -> dict:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+
+        c.execute("SELECT status, COUNT(*) FROM bot_status GROUP BY status")
+        status_counts = dict(c.fetchall())
+
+        c.execute("SELECT COUNT(*) FROM task_queue WHERE status='pending'")
+        pending = c.fetchone()[0]
+
+        c.execute(
+            "SELECT COUNT(*) FROM task_queue WHERE status='completed'"
+            " AND completed >= datetime('now', '-24 hours')"
+        )
+        completed_24h = c.fetchone()[0]
+
+        c.execute(
+            "SELECT COUNT(*) FROM task_queue WHERE status='failed'"
+            " AND completed >= datetime('now', '-24 hours')"
+        )
+        failed_24h = c.fetchone()[0]
+
+        c.execute(
+            "SELECT id, bot_id, task, result, completed FROM task_queue"
+            " WHERE status='failed' ORDER BY id DESC LIMIT 5"
+        )
+        failures = [
+            {
+                "id": r[0],
+                "bot_id": r[1],
+                "task": (r[2] or "")[:80],
+                "error": (r[3] or "")[:120],
+                "at": r[4],
+            }
+            for r in c.fetchall()
+        ]
+
+        conn.close()
+        return {
+            "bots": {
+                "total": sum(status_counts.values()),
+                "idle": status_counts.get("idle", 0),
+                "working": status_counts.get("working", 0),
+                "blocked": status_counts.get("blocked", 0),
+                "review_ready": status_counts.get("review_ready", 0),
+            },
+            "tasks": {
+                "pending": pending,
+                "completed_24h": completed_24h,
+                "failed_24h": failed_24h,
+            },
+            "recent_failures": failures,
+        }
+
     async def run_debate(self, topic: str) -> dict:
         takes = {}
         for name, persona in DEBATE_PERSONAS.items():
