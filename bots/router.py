@@ -815,6 +815,12 @@ Broker Breakdown:
                     )
             except Exception as e:
                 print(f">> ROBOWRIGHT ROUTER: pattern lookup failed: {e}")
+            try:
+                from bot_orchestrator import update_bot_activity, log_bot_activity
+                update_bot_activity("robowright", f"writing {_task_type}...")
+                log_bot_activity("robowright", "task_start", f"{_task_type}: {_topic[:60]}")
+            except Exception:
+                pass
             from bots.robowright_media import make_carousel
             _result = await make_carousel(
                 _topic,
@@ -828,6 +834,12 @@ Broker Breakdown:
                 save_pattern("robowright", _task_type, _content, _result)
             except Exception as e:
                 print(f">> ROBOWRIGHT ROUTER: pattern save failed: {e}")
+            try:
+                from bot_orchestrator import update_bot_activity, log_bot_activity
+                update_bot_activity("robowright", f"{_task_type}: {_topic[:30]} ✓")
+                log_bot_activity("robowright", "task_complete", f"{_task_type} ready: {_topic[:60]}")
+            except Exception:
+                pass
             return _result
         elif q.startswith("trending audio"):
             niche = user_msg[14:].strip() or "finance"

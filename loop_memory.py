@@ -126,6 +126,17 @@ def save_handoff(from_bot: str, to_bot: str, topic: str, context: str, suggested
         conn.commit()
     finally:
         conn.close()
+    try:
+        from bot_orchestrator import update_bot_activity, log_bot_activity
+        short_topic = (topic or "").strip()[:40]
+        update_bot_activity(from_bot, f"→ {to_bot}: handoff sent")
+        log_bot_activity(
+            from_bot, "handoff",
+            f"→ {to_bot}: {short_topic}",
+            from_bot=from_bot, to_bot=to_bot,
+        )
+    except Exception:
+        pass
 
 
 def get_pending_handoffs(bot_id: str) -> List[Dict]:

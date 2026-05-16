@@ -155,6 +155,23 @@ def init_orchestrator_db():
         )
         """
     )
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bot_activity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bot_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            message TEXT NOT NULL,
+            from_bot TEXT,
+            to_bot TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    try:
+        c.execute("ALTER TABLE bot_status ADD COLUMN activity_text TEXT DEFAULT 'idle'")
+    except Exception:
+        pass
     now = datetime.now().isoformat()
     for bot_id in BOT_REGISTRY:
         c.execute(
@@ -166,6 +183,49 @@ def init_orchestrator_db():
         )
     conn.commit()
     conn.close()
+
+
+def update_bot_activity(bot_id: str, text: str) -> None:
+    """Set the per-room activity subtitle for a bot (max 60 chars)."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(
+            "UPDATE bot_status SET activity_text=? WHERE bot_id=?",
+            ((text or "idle").strip()[:60], bot_id),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def log_bot_activity(
+    bot_id: str,
+    event_type: str,
+    message: str,
+    from_bot: Optional[str] = None,
+    to_bot: Optional[str] = None,
+) -> None:
+    """Append an event to bot_activity_log; keep last 100 rows."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(
+            """
+            INSERT INTO bot_activity_log (bot_id, event_type, message, from_bot, to_bot)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (bot_id, event_type, (message or "").strip()[:120], from_bot, to_bot),
+        )
+        c.execute(
+            "DELETE FROM bot_activity_log WHERE id NOT IN"
+            " (SELECT id FROM bot_activity_log ORDER BY id DESC LIMIT 100)"
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
 
 
 class TaskAssignment(BaseModel):
@@ -187,11 +247,14 @@ class BotOrchestrator:
     def get_all_statuses(self) -> dict:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("SELECT bot_id, status, current_task, last_updated FROM bot_status ORDER BY bot_id")
+        c.execute(
+            "SELECT bot_id, status, current_task, last_updated, COALESCE(activity_text,'idle')"
+            " FROM bot_status ORDER BY bot_id"
+        )
         rows = c.fetchall()
         conn.close()
         result = {}
-        for bot_id, status, current_task, last_updated in rows:
+        for bot_id, status, current_task, last_updated, activity_text in rows:
             meta = BOT_REGISTRY.get(bot_id, {"name": bot_id.upper(), "icon": "•"})
             result[bot_id] = {
                 "name": meta["name"],
@@ -200,6 +263,7 @@ class BotOrchestrator:
                 "color": STATUS_TO_COLOR.get(status, "blue"),
                 "current_task": current_task,
                 "last_updated": last_updated,
+                "activity_text": activity_text,
             }
         return result
 
@@ -342,6 +406,32 @@ class BotOrchestrator:
             },
             "recent_failures": failures,
         }
+
+    def get_recent_activity(self, limit: int = 30) -> list:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT id, bot_id, event_type, message, from_bot, to_bot, created_at
+            FROM bot_activity_log
+            ORDER BY id DESC LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = c.fetchall()
+        conn.close()
+        return [
+            {
+                "id": r[0],
+                "bot_id": r[1],
+                "event_type": r[2],
+                "message": r[3],
+                "from_bot": r[4],
+                "to_bot": r[5],
+                "created_at": r[6],
+            }
+            for r in rows
+        ]
 
     async def run_debate(self, topic: str) -> dict:
         takes = {}
@@ -644,3 +734,7 @@ def register_routes(app):
     @app.get("/api/bots/notifications")
     async def api_bot_notifications():
         return JSONResponse(orchestrator.get_unseen_notifications())
+
+    @app.get("/api/bots/activity")
+    async def api_bot_activity():
+        return JSONResponse(orchestrator.get_recent_activity(limit=30))
