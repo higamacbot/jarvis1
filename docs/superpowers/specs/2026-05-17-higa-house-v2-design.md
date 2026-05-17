@@ -37,6 +37,7 @@ The v2 screen must preserve all current working behavior from `frontend/house.ht
 - Active room state
 - Roundtable behavior
 - Debate arena behavior and debate-specific rendering
+- Continuous canvas animation loop and per-room canvas rendering
 - Live WebSocket chat over `/ws/house`
 - Command input, send button, Enter-to-send, and textarea autosize
 - Initial system/welcome messaging
@@ -44,6 +45,7 @@ The v2 screen must preserve all current working behavior from `frontend/house.ht
 - CPU, RAM, uptime, and connection state in the shell
 - Polling from `/api/bots/status`
 - Polling from `/api/bots/activity`
+- Polling from `/api/bots/notifications`
 - Per-room `activity_text` subtitles
 - Existing room status coloring and working/idle/offline signals
 - Reconnect and offline handling
@@ -101,6 +103,7 @@ Rules:
 
 - This line must come from real state, primarily `/api/workflows` plus existing activity/status signals
 - It should prefer the single most important active operation
+- Priority order for v1: active workflow > active review step > recent handoff within 30 seconds > idle
 - It should degrade gracefully to idle text when nothing is running
 
 This is the “PAI status line” idea translated into Jarvis-native UI.
@@ -115,6 +118,7 @@ Required behavior:
 - Keep the current room topology recognizable
 - Preserve click-to-engage interactions
 - Preserve roundtable and debate arena special cases
+- Preserve the existing canvas-based sprite animation system rather than replacing it in v1
 
 Visual upgrade goals:
 
@@ -125,11 +129,55 @@ Visual upgrade goals:
 
 The grid should feel more alive, but not cartoonish.
 
+Canvas preservation rule:
+
+- Port the existing `requestAnimationFrame` loop and per-room canvas rendering logic from `house.html` into v2 for the first implementation pass
+- Do not replace the canvas system with CSS-only room cards in v1
+- Any later canvas redesign should be treated as a separate iteration after parity is proven
+
+Debate preservation rule:
+
+- Preserve `colorDebateMsg()` behavior for `[DEBATE]`, `[SHAMAN]`, `[LIB MOM]`, and `[MAGA DAD]`
+- Preserve the debate arena canvas composition with three seated debate characters around a central table
+- Preserve the special `IN ARENA` state on the individual debate bot rooms while `debateroom` is active
+- Preserve the current coupling where selecting `debateroom` moves `shaman`, `libmom`, and `magadad` into debate-specific visual state
+
 ### 4. Operations Rail
 
-The right-side panel should become a stacked operations rail instead of acting primarily as a plain message log.
+The right-side panel should become a stacked operations rail, but it must still include the live message log as a first-class surface.
+
+The v1 layout decision is:
+
+- Keep the message log and command composer in the right-side system surface
+- Add the operations sections above the message log instead of replacing it
+- Make the right rail wider than the current 300px layout
+- Use a scrollable rail so the stacked sections do not clip on shorter screens
+
+Default v1 rail sizing:
+
+- Main layout: `grid-template-columns: minmax(760px, 1fr) 400px`
+- Operations/message rail: vertically scrollable
+- Message log: flexes to take remaining height after the compact operations cards above it
 
 It should contain these sections:
+
+#### Message Log
+
+Purpose:
+
+- Preserve the current bot conversation history, thinking state, debate formatting, unsolicited notifications, and command-driven feel
+
+Contents:
+
+- Current room/bot conversation history
+- Thinking dots
+- Debate-specific message rendering
+- System/engagement messages
+
+Primary sources:
+
+- `/ws/house`
+- `/api/bots/notifications`
 
 #### Active Workflow
 
@@ -166,6 +214,12 @@ Primary source:
 
 - Existing review workflow outputs and activity data
 
+v1 source constraint:
+
+- There is no dedicated review verdict API yet
+- v1 should derive latest review state from `/api/workflows` and `/api/bots/activity`
+- If no trustworthy verdict or recommendation text is available, the UI should show stage/status only rather than inventing a summary
+
 #### Recent Handoffs
 
 Purpose:
@@ -198,7 +252,14 @@ Contents:
 - Latest clip report
 - Latest workflow result
 
-These shortcuts do not need to be file-browser-complete. v1 should favor the latest useful artifact surfaces.
+v1 action rule:
+
+- These are action shortcuts, not arbitrary filesystem links
+- Preferred v1 actions are:
+  - `review latest carousel`
+  - `review latest clip report`
+  - `review latest workflow`
+- If a richer artifact API is added later, the rail can evolve into direct file or result navigation
 
 #### Tracked Usage
 
@@ -235,7 +296,7 @@ Suggested chips:
 - `review latest carousel`
 - `review latest clip report`
 - `workflow clip_to_carousel`
-- `review workflow <id>`
+- `review latest workflow`
 
 Quick commands must send real commands through the same command path as typed input.
 
@@ -260,6 +321,7 @@ The new UI should maximize reuse of existing data paths.
 - `/ws/house`
 - `/api/bots/status`
 - `/api/bots/activity`
+- `/api/bots/notifications`
 - Existing telemetry payloads
 
 ### New or Expanded Sources
@@ -279,6 +341,7 @@ Core interaction rules:
 - The command input remains central
 - Workflows can be observed without leaving the command context
 - Artifacts and reviews should be reachable from the rail without displacing room engagement
+- The message log remains visible in the replacement UI, not hidden behind a second mode or tab in v1
 
 The UI should feel like one command center, not a collection of disconnected dashboards.
 
@@ -297,10 +360,14 @@ The following checklist must pass before v2 can replace the current page:
 - Roundtable selection still works
 - Telemetry updates live
 - Activity feed updates live
+- Notification polling works and unsolicited bot messages still appear
 - Per-room subtitles update live
 - Bot status coloring remains correct
 - Reconnect flow remains correct
 - Initial welcome state remains correct
+- Dynamic agent count still updates from `/api/bots/status`
+- Canvas animation loop still runs
+- Debate arena visual state still works, including `IN ARENA` behavior
 
 ## New Capability Checklist
 
@@ -309,7 +376,7 @@ These additions must also work before replacement:
 - Workflow card shows real running workflow state
 - Status line reflects real workflow/review state
 - Handoffs are clearly visible
-- Artifact shortcuts resolve to real recent artifacts
+- Artifact shortcuts trigger honest review or workflow commands for real recent artifacts
 - Review-oriented quick commands are present
 - Workflow quick commands are present
 - Usage panel is either connected to real data or explicitly labeled not connected
@@ -341,8 +408,11 @@ This keeps rollback simple and avoids breaking the currently working interface.
 
 Port and verify the current working behaviors before layering new features:
 
+- Message log placement and sizing
 - WebSocket chat
+- Notification polling
 - Room selection
+- Canvas animation loop
 - Debate behavior
 - Telemetry updates
 - Status polling
@@ -356,7 +426,7 @@ The principle is: no new surface area before old behavior works in v2.
 
 - Wire the active workflow section to `/api/workflows`
 - Recompose activity data into clearer handoff/review presentation
-- Add artifact shortcut surfaces
+- Add artifact shortcut surfaces as action shortcuts, not filesystem links
 
 ### Phase 4: Add Quick Commands
 
@@ -376,6 +446,7 @@ Compare old and new UIs against:
 - Debate room flow
 - Workflow run
 - Artifact-aware review command
+- Unsolicited notification flow
 - Reconnect/offline behavior
 
 Only after the comparison passes should v2 become the replacement candidate.
