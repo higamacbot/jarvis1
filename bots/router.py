@@ -55,6 +55,86 @@ ROUND_ORDER = [
 ]
 
 
+_REVIEW_OLLAMA_URL = "http://localhost:11434/api/generate"
+_REVIEW_MODEL = "qwen3:8b"
+
+
+async def _run_adversarial_review(job_id: int, input_text: str) -> str:
+    """Three-step adversarial review: Producer draft → Challenger critique → Arbiter verdict."""
+    import httpx as _httpx
+    from bot_orchestrator import update_bot_activity, log_bot_activity
+    from workflow import advance_workflow, fail_workflow
+
+    async def _call(prompt: str, timeout: float = 90.0) -> str:
+        try:
+            async with _httpx.AsyncClient(timeout=timeout) as h:
+                r = await h.post(
+                    _REVIEW_OLLAMA_URL,
+                    json={"model": _REVIEW_MODEL, "prompt": prompt, "stream": False, "think": False},
+                )
+                return (r.json().get("response") or "").strip()
+        except Exception as e:
+            return f"[error: {e}]"
+
+    # ── Step 1: Producer draft ────────────────────────────────────────────────
+    update_bot_activity("jarvisbot", "drafting...")
+    log_bot_activity("jarvisbot", "task_start", f"review #{job_id}: drafting")
+
+    draft = await _call(
+        f"You are the Producer in an adversarial review.\n"
+        f"State the core claim, approach, or key points of the following input.\n"
+        f"Be specific and concise — 3-5 bullet points. No preamble.\n\n"
+        f"INPUT:\n{input_text[:3000]}"
+    )
+    advance_workflow(job_id, "jarvisbot", "draft_complete", draft)
+    log_bot_activity("jarvisbot", "task_complete", f"review #{job_id}: draft ready")
+
+    # ── Step 2: Challenger critique ───────────────────────────────────────────
+    update_bot_activity("doctorbot", "challenging...")
+    log_bot_activity("doctorbot", "task_start", f"review #{job_id}: challenging")
+
+    challenge = await _call(
+        f"You are the Challenger in an adversarial review.\n"
+        f"Find the strongest objections, risks, or flaws. Be specific and direct.\n"
+        f"List 3-5 concrete problems. No hedging. No preamble.\n\n"
+        f"DRAFT:\n{draft[:2000]}\n\n"
+        f"ORIGINAL INPUT:\n{input_text[:1000]}"
+    )
+    advance_workflow(job_id, "doctorbot", "challenge_complete", challenge)
+    log_bot_activity("doctorbot", "task_complete", f"review #{job_id}: challenge ready")
+
+    # ── Step 3: Arbiter verdict ───────────────────────────────────────────────
+    update_bot_activity("jarvisbot", "arbitrating...")
+    log_bot_activity("jarvisbot", "task_start", f"review #{job_id}: verdict")
+
+    verdict = await _call(
+        f"You are the Arbiter. Weigh the draft against the challenge.\n"
+        f"Return EXACTLY this format, no extra text:\n\n"
+        f"VERDICT: [APPROVED | NEEDS_REVISION | REJECTED]\n"
+        f"STRENGTH: [what holds up — 1-2 sentences]\n"
+        f"WEAKNESSES: [what the challenge exposed — 1-2 sentences]\n"
+        f"RECOMMENDATION: [concrete next step — 1 sentence]\n\n"
+        f"DRAFT:\n{draft[:1500]}\n\n"
+        f"CHALLENGE:\n{challenge[:1500]}"
+    )
+    advance_workflow(job_id, "jarvisbot", "verdict_complete", verdict)
+    update_bot_activity("jarvisbot", f"review #{job_id} ✓")
+    log_bot_activity("jarvisbot", "task_complete", f"review #{job_id} complete")
+
+    short = input_text[:100].replace("\n", " ")
+    sep = "─" * 48
+    return (
+        f"ADVERSARIAL REVIEW — Job #{job_id}\n"
+        f"Input: {short}{'...' if len(input_text) > 100 else ''}\n\n"
+        f"{sep}\n"
+        f"DRAFT (Producer)\n{draft}\n\n"
+        f"{sep}\n"
+        f"CHALLENGE (Reviewer)\n{challenge}\n\n"
+        f"{sep}\n"
+        f"VERDICT (Arbiter)\n{verdict}\n"
+    )
+
+
 def build_generic_roundtable_update(stock_context: str, crypto_total: float, crypto_lines: str) -> str:
     """Build deterministic roundtable update from live data — no Ollama needed."""
     import re
@@ -344,42 +424,67 @@ Every agent line must be present."""
         if user_msg.lower().strip().startswith("workflow "):
             _parts = user_msg.strip().split(" ", 2)
             if len(_parts) < 3:
-                return "Usage: workflow clip_to_carousel <url>"
+                return "Usage: workflow <template> <input>\nTemplates: clip_to_carousel, adversarial_review"
             _, _template, _workflow_input = _parts
-            if _template != "clip_to_carousel":
-                return f"Unknown workflow template: {_template}"
+
+            if _template == "clip_to_carousel":
+                try:
+                    from workflow import create_workflow, get_current_step, advance_workflow
+                    from bot_orchestrator import update_bot_activity, log_bot_activity
+                    job_id = create_workflow(_template, _workflow_input)
+                    log_bot_activity("jarvisbot", "task_start", f"workflow {job_id} started: {_template}")
+                    update_bot_activity("jarvisbot", f"workflow: {_template}")
+                    current_step = get_current_step(job_id)
+                    if not current_step or current_step.get("bot_id") != "clipfarmer":
+                        return f"Workflow {job_id} created, but no runnable first step was found."
+                    from bots.clipfarmer import farm_clips
+                    import asyncio as _asyncio
+                    clip_result = await _asyncio.to_thread(farm_clips, _workflow_input)
+                    next_step = advance_workflow(job_id, "clipfarmer", "clip_analysis_complete", clip_result)
+                    if next_step and next_step.get("bot_id") == "robowright":
+                        from loop_memory import get_pending_handoffs
+                        handoffs = get_pending_handoffs("robowright")
+                        handoff_topic = (
+                            str(handoffs[-1].get("topic", "")).strip() if handoffs else "workflow handoff"
+                        ) or "workflow handoff"
+                        from bots.robowright_media import make_carousel
+                        carousel_result = await make_carousel(handoff_topic, n_slides=7, platform="instagram")
+                        advance_workflow(job_id, "robowright", "carousel_complete", carousel_result)
+                        update_bot_activity("jarvisbot", f"workflow {_template} ✓")
+                        log_bot_activity("jarvisbot", "task_complete", f"workflow {job_id} complete")
+                        return (
+                            f"Workflow {job_id} complete — {_template}\n\n"
+                            f"Step 1:\n{clip_result}\n\n"
+                            f"Step 2:\n{carousel_result}"
+                        )
+                    return f"Workflow {job_id} created.\n\nStep 1:\n{clip_result}"
+                except Exception as e:
+                    return f"Workflow failed: {e}"
+
+            elif _template == "adversarial_review":
+                try:
+                    from workflow import create_workflow
+                    job_id = create_workflow("adversarial_review", _workflow_input)
+                    return await _run_adversarial_review(job_id, _workflow_input)
+                except Exception as e:
+                    return f"Adversarial review failed: {e}"
+
+            else:
+                return f"Unknown workflow template: {_template}\nKnown: clip_to_carousel, adversarial_review"
+
+        # Shorthand: "review <text>" — adversarial review without the workflow prefix
+        _qlc = user_msg.lower().strip()
+        if _qlc.startswith("review ") or _qlc.startswith("adversarial review "):
+            _rev_offset = 19 if _qlc.startswith("adversarial review ") else 7
+            _rev_input = user_msg[_rev_offset:].strip()
+            if not _rev_input:
+                return "Usage: review <text, task, draft, or approach>"
             try:
-                from workflow import create_workflow, get_current_step, advance_workflow
-                from bot_orchestrator import update_bot_activity, log_bot_activity
-                job_id = create_workflow(_template, _workflow_input)
-                log_bot_activity("jarvisbot", "task_start", f"workflow {job_id} started: {_template}")
-                update_bot_activity("jarvisbot", f"workflow: {_template}")
-                current_step = get_current_step(job_id)
-                if not current_step or current_step.get("bot_id") != "clipfarmer":
-                    return f"Workflow {job_id} created, but no runnable first step was found."
-                from bots.clipfarmer import farm_clips
-                import asyncio as _asyncio
-                clip_result = await _asyncio.to_thread(farm_clips, _workflow_input)
-                next_step = advance_workflow(job_id, "clipfarmer", "clip_analysis_complete", clip_result)
-                if next_step and next_step.get("bot_id") == "robowright":
-                    from loop_memory import get_pending_handoffs
-                    handoffs = get_pending_handoffs("robowright")
-                    handoff_topic = (
-                        str(handoffs[-1].get("topic", "")).strip() if handoffs else "workflow handoff"
-                    ) or "workflow handoff"
-                    from bots.robowright_media import make_carousel
-                    carousel_result = await make_carousel(handoff_topic, n_slides=7, platform="instagram")
-                    advance_workflow(job_id, "robowright", "carousel_complete", carousel_result)
-                    update_bot_activity("jarvisbot", f"workflow {_template} ✓")
-                    log_bot_activity("jarvisbot", "task_complete", f"workflow {job_id} complete")
-                    return (
-                        f"Workflow {job_id} complete — {_template}\n\n"
-                        f"Step 1:\n{clip_result}\n\n"
-                        f"Step 2:\n{carousel_result}"
-                    )
-                return f"Workflow {job_id} created.\n\nStep 1:\n{clip_result}"
+                from workflow import create_workflow
+                job_id = create_workflow("adversarial_review", _rev_input)
+                return await _run_adversarial_review(job_id, _rev_input)
             except Exception as e:
-                return f"Workflow failed: {e}"
+                return f"Review failed: {e}"
 
         # Clip-farmer: "clip this: URL" / "farm clips from: URL"
         _CLIP_TRIGGER_RE = _re.compile(r'\b(clip\s+this|farm\s+clips?\s+from)\b', _re.IGNORECASE)

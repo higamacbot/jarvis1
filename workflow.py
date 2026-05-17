@@ -10,6 +10,11 @@ TEMPLATES = {
         {"bot_id": "clipfarmer", "task": "clip this: {input}", "action": "clip_analysis_complete"},
         {"bot_id": "robowright", "task": "carousel from handoff", "action": "carousel_complete"},
     ],
+    "adversarial_review": [
+        {"bot_id": "jarvisbot", "task": "draft: {input}", "action": "draft_complete"},
+        {"bot_id": "doctorbot", "task": "challenge: {input}", "action": "challenge_complete"},
+        {"bot_id": "jarvisbot", "task": "verdict: {input}", "action": "verdict_complete"},
+    ],
 }
 
 
