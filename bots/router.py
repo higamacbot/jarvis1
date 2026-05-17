@@ -2,6 +2,7 @@
 Clean router with proper imports and error handling
 """
 
+import os
 from bots import stockbot
 import sys
 sys.path.insert(0, "/Users/higabot1/jarvis1-1")
@@ -57,6 +58,130 @@ ROUND_ORDER = [
 
 _REVIEW_OLLAMA_URL = "http://localhost:11434/api/generate"
 _REVIEW_MODEL = "qwen3:8b"
+_JARVIS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_CLIPS_DIR = os.path.join(_JARVIS_ROOT, "clips")
+_HIGA_CLIPS_DIR = os.path.expanduser("~/Movies/HIGA HOUSE Clips")
+
+
+def _resolve_review_target(raw: str):
+    """
+    Resolve a review shorthand into (content, label).
+    Returns (None, error_str) on failure.
+    Falls through to (raw, raw[:60]) for plain text.
+    """
+    import glob as _glob
+    import json as _json
+
+    lc = raw.strip().lower()
+
+    # ── latest carousel ───────────────────────────────────────────────────────
+    if lc in ("latest carousel", "carousel"):
+        matches = sorted(
+            [d for d in _glob.glob(os.path.join(_CLIPS_DIR, "carousel_*")) if os.path.isdir(d)],
+            reverse=True,
+        )
+        if not matches:
+            return None, "no carousel folders found in clips/"
+        folder = matches[0]
+        for fname in ("carousel.md", "carousel.json"):
+            fpath = os.path.join(folder, fname)
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, encoding="utf-8") as f:
+                        return f.read(6000), os.path.basename(folder)
+                except Exception as e:
+                    return None, f"cannot read {fpath}: {e}"
+        return None, f"no carousel.md or carousel.json in {folder}"
+
+    # ── latest clip report ────────────────────────────────────────────────────
+    if lc in ("latest clip report", "latest clip", "latest report"):
+        tok_dirs = [d for d in _glob.glob(os.path.join(_HIGA_CLIPS_DIR, "tok_*")) if os.path.isdir(d)]
+        all_dirs = [d for d in _glob.glob(os.path.join(_HIGA_CLIPS_DIR, "*")) if os.path.isdir(d)]
+        candidates = tok_dirs if tok_dirs else all_dirs
+        if not candidates:
+            return None, "no clip folders found in ~/Movies/HIGA HOUSE Clips"
+        folder = max(candidates, key=os.path.getmtime)
+        parts = []
+        report_path = os.path.join(folder, "report.md")
+        if os.path.exists(report_path):
+            try:
+                with open(report_path, encoding="utf-8") as f:
+                    parts.append(f.read(3000))
+            except Exception:
+                pass
+        analysis_path = os.path.join(folder, "analysis.json")
+        if os.path.exists(analysis_path):
+            try:
+                with open(analysis_path, encoding="utf-8") as f:
+                    a = _json.load(f)
+                summary = (a.get("summary") or "").strip()
+                insights = a.get("key_insights") or []
+                if summary:
+                    parts.append("ANALYSIS SUMMARY:\n" + summary)
+                if insights:
+                    parts.append("KEY INSIGHTS:\n" + "\n".join(f"- {i}" for i in insights[:5]))
+            except Exception:
+                pass
+        if not parts:
+            return None, f"no report.md or analysis.json in {folder}"
+        return ("\n\n".join(parts))[:6000], os.path.basename(folder)
+
+    # ── review workflow <id> ──────────────────────────────────────────────────
+    if lc.startswith("workflow "):
+        job_id_str = raw.strip().split(" ", 1)[1].strip()
+        try:
+            job_id = int(job_id_str)
+        except ValueError:
+            return None, f"invalid workflow id: {job_id_str!r} — expected a number"
+        import sqlite3 as _sq3
+        db_path = os.path.join(_JARVIS_ROOT, "jarvis_memory.db")
+        try:
+            conn = _sq3.connect(db_path)
+            conn.row_factory = _sq3.Row
+            c = conn.cursor()
+            c.execute("SELECT id, name, status, input_text FROM workflow_jobs WHERE id=?", (job_id,))
+            job_row = c.fetchone()
+            if not job_row:
+                conn.close()
+                return None, f"workflow job #{job_id} not found"
+            job = dict(job_row)
+            c.execute(
+                "SELECT step_index, bot_id, action, status, result"
+                " FROM workflow_steps WHERE job_id=? ORDER BY step_index",
+                (job_id,),
+            )
+            steps = [dict(r) for r in c.fetchall()]
+            conn.close()
+        except Exception as e:
+            return None, f"workflow DB error: {e}"
+        lines = [
+            f"WORKFLOW #{job_id} — {job['name']} ({job['status']})",
+            f"Input: {(job.get('input_text') or '')[:300]}",
+            "",
+        ]
+        for s in steps:
+            snippet = (s.get("result") or "")[:500]
+            lines.append(f"Step {s['step_index'] + 1} [{s['bot_id']}] {s['action']} — {s['status']}")
+            if snippet:
+                lines.append(snippet)
+            lines.append("")
+        return ("\n".join(lines))[:6000], f"workflow #{job_id}"
+
+    # ── review file <absolute_path> ───────────────────────────────────────────
+    if lc.startswith("file "):
+        path = raw.strip()[5:].strip()
+        if not os.path.isabs(path):
+            return None, f"path must be absolute: {path!r}"
+        if not os.path.exists(path):
+            return None, f"file not found: {path}"
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                return f.read(8000), os.path.basename(path)
+        except Exception as e:
+            return None, f"cannot read {path}: {e}"
+
+    # ── plain text — pass through ─────────────────────────────────────────────
+    return raw, raw[:60]
 
 
 async def _run_adversarial_review(job_id: int, input_text: str) -> str:
@@ -472,17 +597,23 @@ Every agent line must be present."""
             else:
                 return f"Unknown workflow template: {_template}\nKnown: clip_to_carousel, adversarial_review"
 
-        # Shorthand: "review <text>" — adversarial review without the workflow prefix
+        # Shorthand: "review <text|artifact>" — adversarial review
         _qlc = user_msg.lower().strip()
         if _qlc.startswith("review ") or _qlc.startswith("adversarial review "):
             _rev_offset = 19 if _qlc.startswith("adversarial review ") else 7
-            _rev_input = user_msg[_rev_offset:].strip()
-            if not _rev_input:
-                return "Usage: review <text, task, draft, or approach>"
+            _rev_raw = user_msg[_rev_offset:].strip()
+            if not _rev_raw:
+                return (
+                    "Usage: review <text | latest carousel | latest clip report"
+                    " | workflow <id> | file <path>>"
+                )
+            _rev_content, _rev_label = _resolve_review_target(_rev_raw)
+            if _rev_content is None:
+                return f"Review: {_rev_label}"
             try:
                 from workflow import create_workflow
-                job_id = create_workflow("adversarial_review", _rev_input)
-                return await _run_adversarial_review(job_id, _rev_input)
+                job_id = create_workflow("adversarial_review", _rev_label)
+                return await _run_adversarial_review(job_id, _rev_content)
             except Exception as e:
                 return f"Review failed: {e}"
 
