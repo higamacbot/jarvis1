@@ -190,6 +190,11 @@ def update_bot_activity(bot_id: str, text: str) -> None:
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        try:
+            c.execute("ALTER TABLE bot_status ADD COLUMN activity_text TEXT DEFAULT 'idle'")
+            conn.commit()
+        except Exception:
+            pass
         c.execute(
             "UPDATE bot_status SET activity_text=? WHERE bot_id=?",
             ((text or "idle").strip()[:60], bot_id),
@@ -211,6 +216,19 @@ def log_bot_activity(
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bot_activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bot_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                from_bot TEXT,
+                to_bot TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         c.execute(
             """
             INSERT INTO bot_activity_log (bot_id, event_type, message, from_bot, to_bot)
@@ -738,3 +756,8 @@ def register_routes(app):
     @app.get("/api/bots/activity")
     async def api_bot_activity():
         return JSONResponse(orchestrator.get_recent_activity(limit=30))
+
+    @app.get("/api/workflows")
+    async def api_workflows():
+        from workflow import list_active_workflows
+        return JSONResponse(list_active_workflows(limit=20))

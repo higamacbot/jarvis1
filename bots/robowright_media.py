@@ -86,6 +86,29 @@ For each video:
     return result + f"\n\nSaved: {path}"
 
 
+async def polish_pass(source_text: str) -> str:
+    prompt = f"""You are a senior UI/UX engineer. Improve the following UI code or design snippet.
+Apply:
+1. A clear spacing system with reusable variables or tokens
+2. Better hierarchy in typography and layout
+3. Meaningful motion or easing on interactive elements
+4. Stronger visual direction with cleaner structure
+5. More polished, less generic output
+
+If the input is HTML/CSS, return improved HTML/CSS.
+If the input is React/JSX, return improved React/JSX.
+If the input is plain UI text/spec, return a polished implementation-ready version.
+
+Return ONLY the improved output, no explanation.
+
+INPUT:
+{source_text[:8000]}
+"""
+    result = await _ask(prompt, timeout=120.0)
+    path = save_script("polish_pass", result)
+    return result + f"\n\nSaved: {path}"
+
+
 # ── Carousel / Storyboard pipeline ──────────────────────────────────────────
 
 def _carousel_fallback(topic: str, n_slides: int, platform: str, source: str = "") -> dict:

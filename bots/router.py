@@ -341,6 +341,46 @@ Every agent line must be present."""
     if bot_id == "jarvisbot":
         import re as _re
 
+        if user_msg.lower().strip().startswith("workflow "):
+            _parts = user_msg.strip().split(" ", 2)
+            if len(_parts) < 3:
+                return "Usage: workflow clip_to_carousel <url>"
+            _, _template, _workflow_input = _parts
+            if _template != "clip_to_carousel":
+                return f"Unknown workflow template: {_template}"
+            try:
+                from workflow import create_workflow, get_current_step, advance_workflow
+                from bot_orchestrator import update_bot_activity, log_bot_activity
+                job_id = create_workflow(_template, _workflow_input)
+                log_bot_activity("jarvisbot", "task_start", f"workflow {job_id} started: {_template}")
+                update_bot_activity("jarvisbot", f"workflow: {_template}")
+                current_step = get_current_step(job_id)
+                if not current_step or current_step.get("bot_id") != "clipfarmer":
+                    return f"Workflow {job_id} created, but no runnable first step was found."
+                from bots.clipfarmer import farm_clips
+                import asyncio as _asyncio
+                clip_result = await _asyncio.to_thread(farm_clips, _workflow_input)
+                next_step = advance_workflow(job_id, "clipfarmer", "clip_analysis_complete", clip_result)
+                if next_step and next_step.get("bot_id") == "robowright":
+                    from loop_memory import get_pending_handoffs
+                    handoffs = get_pending_handoffs("robowright")
+                    handoff_topic = (
+                        str(handoffs[-1].get("topic", "")).strip() if handoffs else "workflow handoff"
+                    ) or "workflow handoff"
+                    from bots.robowright_media import make_carousel
+                    carousel_result = await make_carousel(handoff_topic, n_slides=7, platform="instagram")
+                    advance_workflow(job_id, "robowright", "carousel_complete", carousel_result)
+                    update_bot_activity("jarvisbot", f"workflow {_template} ✓")
+                    log_bot_activity("jarvisbot", "task_complete", f"workflow {job_id} complete")
+                    return (
+                        f"Workflow {job_id} complete — {_template}\n\n"
+                        f"Step 1:\n{clip_result}\n\n"
+                        f"Step 2:\n{carousel_result}"
+                    )
+                return f"Workflow {job_id} created.\n\nStep 1:\n{clip_result}"
+            except Exception as e:
+                return f"Workflow failed: {e}"
+
         # Clip-farmer: "clip this: URL" / "farm clips from: URL"
         _CLIP_TRIGGER_RE = _re.compile(r'\b(clip\s+this|farm\s+clips?\s+from)\b', _re.IGNORECASE)
         _YT_URL_RE = _re.search(
@@ -758,6 +798,9 @@ Broker Breakdown:
     # Robowright commands
     if bot_id == "robowright":
         q = user_msg.lower().strip()
+        if q.startswith("polish "):
+            from bots.robowright_media import polish_pass
+            return await polish_pass(user_msg[7:].strip())
         _FORCE_PREFIXES = ("new project: ", "fresh cut: ")
         if any(q.startswith(p) for p in _FORCE_PREFIXES):
             prefix_len = next(len(p) for p in _FORCE_PREFIXES if q.startswith(p))
@@ -834,6 +877,13 @@ Broker Breakdown:
                 save_pattern("robowright", _task_type, _content, _result)
             except Exception as e:
                 print(f">> ROBOWRIGHT ROUTER: pattern save failed: {e}")
+            try:
+                from workflow import get_active_job, advance_workflow
+                _job = get_active_job("clip_to_carousel")
+                if _job:
+                    advance_workflow(int(_job["id"]), "robowright", "carousel_complete", _result)
+            except Exception as e:
+                print(f">> ROBOWRIGHT ROUTER: workflow advance failed: {e}")
             try:
                 from bot_orchestrator import update_bot_activity, log_bot_activity
                 update_bot_activity("robowright", f"{_task_type}: {_topic[:30]} ✓")
