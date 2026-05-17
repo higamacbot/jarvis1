@@ -267,7 +267,16 @@ def advance_workflow(job_id: int, completing_bot: str, action: str, result: str)
                 f"workflow step {int(next_step['step_index']) + 1}: {next_step['task_text'][:80]}",
             )
         else:
-            log_bot_activity("jarvisbot", "task_complete", f"workflow {job_id} complete")
+            conn = sqlite3.connect(DB_PATH)
+            try:
+                c = conn.cursor()
+                c.execute("SELECT name FROM workflow_jobs WHERE id = ? LIMIT 1", (job_id,))
+                row = c.fetchone()
+                workflow_name = row[0] if row else ""
+            finally:
+                conn.close()
+            if workflow_name != "adversarial_review":
+                log_bot_activity("jarvisbot", "task_complete", f"workflow {job_id} complete")
     except Exception:
         pass
 
