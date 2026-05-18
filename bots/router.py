@@ -2,6 +2,7 @@
 Clean router with proper imports and error handling
 """
 
+import os
 from bots import stockbot
 import sys
 sys.path.insert(0, "/Users/higabot1/jarvis1-1")
@@ -53,6 +54,210 @@ ROUND_ORDER = [
     "TEACHERBOT",
     "DEBATE ROOM",
 ]
+
+
+_REVIEW_OLLAMA_URL = "http://localhost:11434/api/generate"
+_REVIEW_MODEL = "qwen3:8b"
+_JARVIS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_CLIPS_DIR = os.path.join(_JARVIS_ROOT, "clips")
+_HIGA_CLIPS_DIR = os.path.expanduser("~/Movies/HIGA HOUSE Clips")
+
+
+def _resolve_review_target(raw: str):
+    """
+    Resolve a review shorthand into (content, label).
+    Returns (None, error_str) on failure.
+    Falls through to (raw, raw[:60]) for plain text.
+    """
+    import glob as _glob
+    import json as _json
+
+    lc = raw.strip().lower()
+
+    # ── latest carousel ───────────────────────────────────────────────────────
+    if lc in ("latest carousel", "carousel"):
+        matches = sorted(
+            [d for d in _glob.glob(os.path.join(_CLIPS_DIR, "carousel_*")) if os.path.isdir(d)],
+            reverse=True,
+        )
+        if not matches:
+            return None, "no carousel folders found in clips/"
+        folder = matches[0]
+        for fname in ("carousel.md", "carousel.json"):
+            fpath = os.path.join(folder, fname)
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, encoding="utf-8") as f:
+                        return f.read(6000), os.path.basename(folder)
+                except Exception as e:
+                    return None, f"cannot read {fpath}: {e}"
+        return None, f"no carousel.md or carousel.json in {folder}"
+
+    # ── latest clip report ────────────────────────────────────────────────────
+    if lc in ("latest clip report", "latest clip", "latest report"):
+        tok_dirs = [d for d in _glob.glob(os.path.join(_HIGA_CLIPS_DIR, "tok_*")) if os.path.isdir(d)]
+        all_dirs = [d for d in _glob.glob(os.path.join(_HIGA_CLIPS_DIR, "*")) if os.path.isdir(d)]
+        candidates = tok_dirs if tok_dirs else all_dirs
+        if not candidates:
+            return None, "no clip folders found in ~/Movies/HIGA HOUSE Clips"
+        folder = max(candidates, key=os.path.getmtime)
+        parts = []
+        report_path = os.path.join(folder, "report.md")
+        if os.path.exists(report_path):
+            try:
+                with open(report_path, encoding="utf-8") as f:
+                    parts.append(f.read(3000))
+            except Exception:
+                pass
+        analysis_path = os.path.join(folder, "analysis.json")
+        if os.path.exists(analysis_path):
+            try:
+                with open(analysis_path, encoding="utf-8") as f:
+                    a = _json.load(f)
+                summary = (a.get("summary") or "").strip()
+                insights = a.get("key_insights") or []
+                if summary:
+                    parts.append("ANALYSIS SUMMARY:\n" + summary)
+                if insights:
+                    parts.append("KEY INSIGHTS:\n" + "\n".join(f"- {i}" for i in insights[:5]))
+            except Exception:
+                pass
+        if not parts:
+            return None, f"no report.md or analysis.json in {folder}"
+        return ("\n\n".join(parts))[:6000], os.path.basename(folder)
+
+    # ── review workflow <id> ──────────────────────────────────────────────────
+    if lc.startswith("workflow "):
+        job_id_str = raw.strip().split(" ", 1)[1].strip()
+        try:
+            job_id = int(job_id_str)
+        except ValueError:
+            return None, f"invalid workflow id: {job_id_str!r} — expected a number"
+        import sqlite3 as _sq3
+        db_path = os.path.join(_JARVIS_ROOT, "jarvis_memory.db")
+        try:
+            conn = _sq3.connect(db_path)
+            conn.row_factory = _sq3.Row
+            c = conn.cursor()
+            c.execute("SELECT id, name, status, input_text FROM workflow_jobs WHERE id=?", (job_id,))
+            job_row = c.fetchone()
+            if not job_row:
+                conn.close()
+                return None, f"workflow job #{job_id} not found"
+            job = dict(job_row)
+            c.execute(
+                "SELECT step_index, bot_id, action, status, result"
+                " FROM workflow_steps WHERE job_id=? ORDER BY step_index",
+                (job_id,),
+            )
+            steps = [dict(r) for r in c.fetchall()]
+            conn.close()
+        except Exception as e:
+            return None, f"workflow DB error: {e}"
+        lines = [
+            f"WORKFLOW #{job_id} — {job['name']} ({job['status']})",
+            f"Input: {(job.get('input_text') or '')[:300]}",
+            "",
+        ]
+        for s in steps:
+            snippet = (s.get("result") or "")[:500]
+            lines.append(f"Step {s['step_index'] + 1} [{s['bot_id']}] {s['action']} — {s['status']}")
+            if snippet:
+                lines.append(snippet)
+            lines.append("")
+        return ("\n".join(lines))[:6000], f"workflow #{job_id}"
+
+    # ── review file <absolute_path> ───────────────────────────────────────────
+    if lc.startswith("file "):
+        path = raw.strip()[5:].strip()
+        if not os.path.isabs(path):
+            return None, f"path must be absolute: {path!r}"
+        if not os.path.exists(path):
+            return None, f"file not found: {path}"
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                return f.read(8000), os.path.basename(path)
+        except Exception as e:
+            return None, f"cannot read {path}: {e}"
+
+    # ── plain text — pass through ─────────────────────────────────────────────
+    return raw, raw[:60]
+
+
+async def _run_adversarial_review(job_id: int, input_text: str) -> str:
+    """Three-step adversarial review: Producer draft → Challenger critique → Arbiter verdict."""
+    import httpx as _httpx
+    from bot_orchestrator import update_bot_activity, log_bot_activity
+    from workflow import advance_workflow, fail_workflow
+
+    async def _call(prompt: str, timeout: float = 90.0) -> str:
+        try:
+            async with _httpx.AsyncClient(timeout=timeout) as h:
+                r = await h.post(
+                    _REVIEW_OLLAMA_URL,
+                    json={"model": _REVIEW_MODEL, "prompt": prompt, "stream": False, "think": False},
+                )
+                return (r.json().get("response") or "").strip()
+        except Exception as e:
+            return f"[error: {e}]"
+
+    # ── Step 1: Producer draft ────────────────────────────────────────────────
+    update_bot_activity("jarvisbot", "drafting...")
+    log_bot_activity("jarvisbot", "task_start", f"review #{job_id}: drafting")
+
+    draft = await _call(
+        f"You are the Producer in an adversarial review.\n"
+        f"State the core claim, approach, or key points of the following input.\n"
+        f"Be specific and concise — 3-5 bullet points. No preamble.\n\n"
+        f"INPUT:\n{input_text[:3000]}"
+    )
+    advance_workflow(job_id, "jarvisbot", "draft_complete", draft)
+    log_bot_activity("jarvisbot", "task_complete", f"review #{job_id}: draft ready")
+
+    # ── Step 2: Challenger critique ───────────────────────────────────────────
+    update_bot_activity("doctorbot", "challenging...")
+    log_bot_activity("doctorbot", "task_start", f"review #{job_id}: challenging")
+
+    challenge = await _call(
+        f"You are the Challenger in an adversarial review.\n"
+        f"Find the strongest objections, risks, or flaws. Be specific and direct.\n"
+        f"List 3-5 concrete problems. No hedging. No preamble.\n\n"
+        f"DRAFT:\n{draft[:2000]}\n\n"
+        f"ORIGINAL INPUT:\n{input_text[:1000]}"
+    )
+    advance_workflow(job_id, "doctorbot", "challenge_complete", challenge)
+    log_bot_activity("doctorbot", "task_complete", f"review #{job_id}: challenge ready")
+
+    # ── Step 3: Arbiter verdict ───────────────────────────────────────────────
+    update_bot_activity("jarvisbot", "arbitrating...")
+    log_bot_activity("jarvisbot", "task_start", f"review #{job_id}: verdict")
+
+    verdict = await _call(
+        f"You are the Arbiter. Weigh the draft against the challenge.\n"
+        f"Return EXACTLY this format, no extra text:\n\n"
+        f"VERDICT: [APPROVED | NEEDS_REVISION | REJECTED]\n"
+        f"STRENGTH: [what holds up — 1-2 sentences]\n"
+        f"WEAKNESSES: [what the challenge exposed — 1-2 sentences]\n"
+        f"RECOMMENDATION: [concrete next step — 1 sentence]\n\n"
+        f"DRAFT:\n{draft[:1500]}\n\n"
+        f"CHALLENGE:\n{challenge[:1500]}"
+    )
+    advance_workflow(job_id, "jarvisbot", "verdict_complete", verdict)
+    update_bot_activity("jarvisbot", f"review #{job_id} ✓")
+    log_bot_activity("jarvisbot", "task_complete", f"review #{job_id} complete")
+
+    short = input_text[:100].replace("\n", " ")
+    sep = "─" * 48
+    return (
+        f"ADVERSARIAL REVIEW — Job #{job_id}\n"
+        f"Input: {short}{'...' if len(input_text) > 100 else ''}\n\n"
+        f"{sep}\n"
+        f"DRAFT (Producer)\n{draft}\n\n"
+        f"{sep}\n"
+        f"CHALLENGE (Reviewer)\n{challenge}\n\n"
+        f"{sep}\n"
+        f"VERDICT (Arbiter)\n{verdict}\n"
+    )
 
 
 def build_generic_roundtable_update(stock_context: str, crypto_total: float, crypto_lines: str) -> str:
@@ -341,6 +546,77 @@ Every agent line must be present."""
     if bot_id == "jarvisbot":
         import re as _re
 
+        if user_msg.lower().strip().startswith("workflow "):
+            _parts = user_msg.strip().split(" ", 2)
+            if len(_parts) < 3:
+                return "Usage: workflow <template> <input>\nTemplates: clip_to_carousel, adversarial_review"
+            _, _template, _workflow_input = _parts
+
+            if _template == "clip_to_carousel":
+                try:
+                    from workflow import create_workflow, get_current_step, advance_workflow
+                    from bot_orchestrator import update_bot_activity, log_bot_activity
+                    job_id = create_workflow(_template, _workflow_input)
+                    log_bot_activity("jarvisbot", "task_start", f"workflow {job_id} started: {_template}")
+                    update_bot_activity("jarvisbot", f"workflow: {_template}")
+                    current_step = get_current_step(job_id)
+                    if not current_step or current_step.get("bot_id") != "clipfarmer":
+                        return f"Workflow {job_id} created, but no runnable first step was found."
+                    from bots.clipfarmer import farm_clips
+                    import asyncio as _asyncio
+                    clip_result = await _asyncio.to_thread(farm_clips, _workflow_input)
+                    next_step = advance_workflow(job_id, "clipfarmer", "clip_analysis_complete", clip_result)
+                    if next_step and next_step.get("bot_id") == "robowright":
+                        from loop_memory import get_pending_handoffs
+                        handoffs = get_pending_handoffs("robowright")
+                        handoff_topic = (
+                            str(handoffs[-1].get("topic", "")).strip() if handoffs else "workflow handoff"
+                        ) or "workflow handoff"
+                        from bots.robowright_media import make_carousel
+                        carousel_result = await make_carousel(handoff_topic, n_slides=7, platform="instagram")
+                        advance_workflow(job_id, "robowright", "carousel_complete", carousel_result)
+                        update_bot_activity("jarvisbot", f"workflow {_template} ✓")
+                        log_bot_activity("jarvisbot", "task_complete", f"workflow {job_id} complete")
+                        return (
+                            f"Workflow {job_id} complete — {_template}\n\n"
+                            f"Step 1:\n{clip_result}\n\n"
+                            f"Step 2:\n{carousel_result}"
+                        )
+                    return f"Workflow {job_id} created.\n\nStep 1:\n{clip_result}"
+                except Exception as e:
+                    return f"Workflow failed: {e}"
+
+            elif _template == "adversarial_review":
+                try:
+                    from workflow import create_workflow
+                    job_id = create_workflow("adversarial_review", _workflow_input)
+                    return await _run_adversarial_review(job_id, _workflow_input)
+                except Exception as e:
+                    return f"Adversarial review failed: {e}"
+
+            else:
+                return f"Unknown workflow template: {_template}\nKnown: clip_to_carousel, adversarial_review"
+
+        # Shorthand: "review <text|artifact>" — adversarial review
+        _qlc = user_msg.lower().strip()
+        if _qlc.startswith("review ") or _qlc.startswith("adversarial review "):
+            _rev_offset = 19 if _qlc.startswith("adversarial review ") else 7
+            _rev_raw = user_msg[_rev_offset:].strip()
+            if not _rev_raw:
+                return (
+                    "Usage: review <text | latest carousel | latest clip report"
+                    " | workflow <id> | file <path>>"
+                )
+            _rev_content, _rev_label = _resolve_review_target(_rev_raw)
+            if _rev_content is None:
+                return f"Review: {_rev_label}"
+            try:
+                from workflow import create_workflow
+                job_id = create_workflow("adversarial_review", _rev_label)
+                return await _run_adversarial_review(job_id, _rev_content)
+            except Exception as e:
+                return f"Review failed: {e}"
+
         # Clip-farmer: "clip this: URL" / "farm clips from: URL"
         _CLIP_TRIGGER_RE = _re.compile(r'\b(clip\s+this|farm\s+clips?\s+from)\b', _re.IGNORECASE)
         _YT_URL_RE = _re.search(
@@ -353,7 +629,9 @@ Every agent line must be present."""
             from bots.clipfarmer import farm_clips
             import asyncio as _asyncio
             result = await _asyncio.to_thread(farm_clips, _clip_url)
-            return f"Clipping now, sir. This may take a minute while I download and cut.\n\n{result}"
+            if result.startswith("Clipped "):
+                return f"Clipping now, sir. This may take a minute while I download and cut.\n\n{result}"
+            return result
 
         _jq = user_msg.lower().strip()
         _FORCE_PREFIXES = ("new project: ", "fresh cut: ")
@@ -758,6 +1036,9 @@ Broker Breakdown:
     # Robowright commands
     if bot_id == "robowright":
         q = user_msg.lower().strip()
+        if q.startswith("polish "):
+            from bots.robowright_media import polish_pass
+            return await polish_pass(user_msg[7:].strip())
         _FORCE_PREFIXES = ("new project: ", "fresh cut: ")
         if any(q.startswith(p) for p in _FORCE_PREFIXES):
             prefix_len = next(len(p) for p in _FORCE_PREFIXES if q.startswith(p))
@@ -780,6 +1061,74 @@ Broker Breakdown:
             theme = user_msg[6:].strip()
             from bots.robowright_media import batch_content_plan
             return await batch_content_plan(theme)
+        elif (q.startswith("carousel ")
+              or q.startswith("make a carousel")
+              or q.startswith("make carousel")
+              or q.startswith("storyboard ")
+              or "turn this transcript into a carousel" in q
+              or "turn transcript into a carousel" in q):
+            _platform = "tiktok" if "tiktok" in q else "instagram"
+            _n_slides = 6 if q.startswith("storyboard") else 7
+            _task_type = "storyboard" if q.startswith("storyboard") else "carousel"
+            _content = user_msg
+            for _pfx in (
+                "make a carousel about ", "make a carousel ",
+                "make carousel about ", "make carousel ",
+                "carousel ", "storyboard ",
+                "turn this transcript into a carousel: ",
+                "turn this transcript into a carousel",
+                "turn transcript into a carousel: ",
+                "turn transcript into a carousel",
+            ):
+                if q.startswith(_pfx):
+                    _content = user_msg[len(_pfx):].strip()
+                    break
+            _transcript = _content if (len(_content) > 200 or "\n" in _content) else ""
+            _topic = (_content.split("\n")[0][:80] if _transcript else _content) or "untitled"
+            _context_hint = ""
+            try:
+                from loop_memory import find_similar_pattern
+                _patterns = find_similar_pattern("robowright", _task_type, _content, n=2)
+                if _patterns:
+                    _context_hint = "\n".join(
+                        f"- Input: {str(p.get('input_sample', '')).strip()} | Output: {str(p.get('output_sample', '')).strip()}"
+                        for p in _patterns
+                    )
+            except Exception as e:
+                print(f">> ROBOWRIGHT ROUTER: pattern lookup failed: {e}")
+            try:
+                from bot_orchestrator import update_bot_activity, log_bot_activity
+                update_bot_activity("robowright", f"writing {_task_type}...")
+                log_bot_activity("robowright", "task_start", f"{_task_type}: {_topic[:60]}")
+            except Exception:
+                pass
+            from bots.robowright_media import make_carousel
+            _result = await make_carousel(
+                _topic,
+                n_slides=_n_slides,
+                platform=_platform,
+                transcript=_transcript,
+                context_hint=_context_hint,
+            )
+            try:
+                from loop_memory import save_pattern
+                save_pattern("robowright", _task_type, _content, _result)
+            except Exception as e:
+                print(f">> ROBOWRIGHT ROUTER: pattern save failed: {e}")
+            try:
+                from workflow import get_active_job, advance_workflow
+                _job = get_active_job("clip_to_carousel")
+                if _job:
+                    advance_workflow(int(_job["id"]), "robowright", "carousel_complete", _result)
+            except Exception as e:
+                print(f">> ROBOWRIGHT ROUTER: workflow advance failed: {e}")
+            try:
+                from bot_orchestrator import update_bot_activity, log_bot_activity
+                update_bot_activity("robowright", f"{_task_type}: {_topic[:30]} ✓")
+                log_bot_activity("robowright", "task_complete", f"{_task_type} ready: {_topic[:60]}")
+            except Exception:
+                pass
+            return _result
         elif q.startswith("trending audio"):
             niche = user_msg[14:].strip() or "finance"
             from bots.robowright_media import find_trending_audio

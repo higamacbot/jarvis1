@@ -12,7 +12,7 @@ import subprocess
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -32,6 +32,7 @@ from mac_tools import detect_mac_command
 from autonomous_runner import runner, queue_youtube_playlist, queue_channel
 from telegram_bot import poll_telegram, send_telegram
 from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, analyze_ticker, analyze_portfolio
+from local_usage import build_local_usage_snapshot
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURATION
@@ -69,7 +70,8 @@ CRITICAL RULES:
 3. If asked about real-time events you do not have access to, admit it directly.
 4. EXCEPTION: If given YOUTUBE VIDEO DATA in extra_context, you ARE authorized to analyze external content. Analyze the video thoroughly using the provided data.
 5. You have access to MEMORY from past conversations. Use it for continuity.
-6. Trade history will be provided. Reference it when discussing portfolio strategy."""
+6. Trade history will be provided. Reference it when discussing portfolio strategy.
+7. USER STORED RULES AND PREFERENCES (in the section labelled USER RULES below) take strict precedence over live portfolio state for questions about rules, floors, limits, preferences, or past instructions. When the user asks about their rule or preference for X: (a) state the rule directly from USER RULES; (b) do NOT add commentary such as "X is not in your portfolio", "no action required", or "not applicable" — the rule exists regardless of current holdings; (c) only reference live portfolio data if the user explicitly asks about current holdings in the same message."""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # KEYS
@@ -121,15 +123,8 @@ def speak(text: str):
 # PREFERENCE DETECTOR
 # ─────────────────────────────────────────────────────────────────────────────
 
-PREFERENCE_TRIGGERS = [
-    "i prefer", "i like", "i don't like", "i dislike", "i want",
-    "i avoid", "my strategy", "i trade", "i hold", "i invest",
-    "remember that", "note that", "keep in mind",
-]
-
 def detect_and_save_preference(user_msg: str):
-    if any(t in user_msg.lower() for t in PREFERENCE_TRIGGERS):
-        memory.save_preference(f"user_note_{int(time.time())}", user_msg.strip())
+    memory.save_explicit_user_memory(user_msg)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TOKEN USAGE TRACKER
@@ -246,16 +241,74 @@ async def ask_ollama(user_msg: str, extra_context: str = "", timeout: float = 24
     metrics = get_system_metrics()
     system_stats = f"CPU: {metrics['cpu_total']}% | RAM: {metrics['ram_used_gb']}GB | Uptime: {metrics['uptime']}"
     trade_hist = get_trade_history(limit=5)
-    memory_block = await asyncio.to_thread(memory.get_memory_context)
-    
+    memory_bundle = await asyncio.to_thread(memory.build_memory_bundle, user_msg)
+    rule_block = memory_bundle.get("rules", "")
+    semantic_block = memory_bundle.get("semantic", "")
+    recent_block = memory_bundle.get("recent", "")
+
     sys_prompt = system_override if system_override else SYSTEM_PROMPT
-    
-    full_prompt = f"""{sys_prompt}
+    _is_mem_query = bool(memory_bundle.get("is_rule_query"))
+    _msg_lc = user_msg.lower().strip()
+
+    # ── Intent: memory planting ────────────────────────────────────────────────
+    # User is stating a rule/preference. Rule already stored by detect_and_save_preference.
+    # Return a clean ack — no Ollama call, no portfolio blending.
+    _is_question = _msg_lc.endswith("?") or _msg_lc.startswith(
+        ("what ", "is ", "do i ", "tell me", "how ", "why ", "when ", "where ")
+    )
+    if (not extra_context and not system_override and not _is_question
+            and any(p in _msg_lc for p in memory.RULE_MEMORY_TRIGGERS)):
+        return "Understood, sir. I've noted that and stored it."
+
+    # ── Intent: pure rule recall ───────────────────────────────────────────────
+    # User is asking about a stored rule only (not also about current holdings).
+    # Use a constrained prompt with no live data so the model can't blend in
+    # "not in portfolio / no action required" commentary.
+    _PORTFOLIO_WORDS = (
+        "in my portfolio", "currently hold", "do i hold", "do i have",
+        "my positions", "my holdings", "portfolio doing",
+    )
+    if (_is_mem_query and not extra_context and not system_override
+            and not any(w in _msg_lc for w in _PORTFOLIO_WORDS)):
+        retrieved = "\n".join(filter(None, [rule_block, semantic_block]))
+        if retrieved:
+            recall_prompt = (
+                "You are J.A.R.V.I.S. The user is asking about a stored rule or preference.\n"
+                f"Stored rules:\n{retrieved}\n\n"
+                f"Question: {user_msg}\n"
+                "Answer in 1-2 sentences. State the rule directly. "
+                "Do not use a briefing header or section label. "
+                "Do not end with 'no further action required', 'may I assist', or similar closings. "
+                "Do not comment on current portfolio or market state.\nJARVIS:"
+            )
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    r = await client.post(OLLAMA_URL, json={"model": MODEL, "prompt": recall_prompt, "stream": False})
+                    return r.json().get("response", "Neural logic error, sir.").strip()
+            except Exception as exc:
+                return f"Neural Link Error: {str(exc)[:80]}"
+        return "I don't have a stored rule for that, sir. State it and I'll remember it."
+
+    # ── General path: mixed queries or direct portfolio/market questions ───────
+    mem_hint = (
+        "\n[RULE QUERY] The user is asking about a stored rule or preference.\n"
+        "Answer format: state the rule from USER RULES directly and concisely.\n"
+        "Do NOT mention whether the asset is currently in the portfolio.\n"
+        "Do NOT say 'no action required', 'not applicable', or 'not currently held'.\n"
+        "Do NOT blend in live portfolio commentary unless the user also asked about current holdings.\n"
+        if _is_mem_query else ""
+    )
+
+    full_prompt = f"""{sys_prompt}{mem_hint}
+--- USER RULES & STORED PREFERENCES (override live portfolio for rule/preference queries) ---
+{rule_block if rule_block else "(no stored rules retrieved)"}
+--- RETRIEVED MEMORY ---
+{semantic_block if semantic_block else "(no semantic memory retrieved)"}
+---
+{recent_block if recent_block else "(no recent context)"}
 --- LIVE DATA ---
 CRYPTO: {market_str}
 SYSTEM: {system_stats}
----
-{memory_block}
 --- RECENT TRADES ---
 {trade_hist}
 ---
@@ -329,6 +382,7 @@ async def websocket_endpoint(websocket: WebSocket):
             command_count += 1
             user_msg = data.get("message", "").strip()
             if not user_msg: continue
+            await asyncio.to_thread(detect_and_save_preference, user_msg)
 
             # FAST PATHS
             if user_msg.lower().startswith("/brief"):
@@ -457,10 +511,10 @@ Do not mention any inability to access external content."""
                 continue
 
             # DEFAULT PATH
-            await asyncio.to_thread(detect_and_save_preference, user_msg)
             reply = await ask_ollama(user_msg)
             await asyncio.to_thread(memory.save_conversation, "user", user_msg)
             await asyncio.to_thread(memory.save_conversation, "jarvis", memory.extract_summary(reply))
+            await asyncio.to_thread(memory.mem0_add, user_msg, memory.extract_summary(reply))
             await asyncio.to_thread(speak, reply)
             await websocket.send_json({"type": "answer", "text": reply})
 
@@ -478,6 +532,14 @@ def _try_obsidian_daily_log(bot_id: str, user_msg: str, reply: str):
         safe_q = (user_msg or "").replace("\n", " ").strip()[:80]
         safe_a = (reply or "").replace("\n", " ").strip()[:120]
         daily_log(bot_name, f"Q: {safe_q} | A: {safe_a}")
+    except Exception:
+        pass
+
+def _save_bot_exchange(bot_id: str, user_msg: str, reply: str):
+    try:
+        safe_bot = (bot_id or "jarvisbot").lower()
+        memory.save_conversation(f"user[{safe_bot}]", user_msg)
+        memory.save_conversation(safe_bot, memory.extract_summary(reply))
     except Exception:
         pass
 
@@ -518,6 +580,7 @@ async def house_websocket(websocket: WebSocket):
             user_msg = data.get("message", "").strip()
             if not user_msg:
                 continue
+            await asyncio.to_thread(detect_and_save_preference, user_msg)
             await websocket.send_json({"type": "thinking", "bot": bot_id})
 
             if user_msg.lower().startswith("/brief"):
@@ -586,7 +649,7 @@ async def house_websocket(websocket: WebSocket):
                     except Exception:
                         news_context += f"\n--- {src['name']} --- (unavailable)\n"
                 reply = await ask_ollama(user_msg, extra_context=news_context)
-                memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+                await asyncio.to_thread(_save_bot_exchange, bot_id, user_msg, reply)
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
                 continue
 
@@ -634,7 +697,7 @@ async def house_websocket(websocket: WebSocket):
 
             if _creative_skip:
                 reply = await route_message(bot_id, user_msg, ask_ollama)
-                memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+                await asyncio.to_thread(_save_bot_exchange, bot_id, user_msg, reply)
                 await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
                 continue
 
@@ -660,7 +723,7 @@ Do not mention any inability to access external content."""
                     )
                     print(f">> YOUTUBE DEBUG: Ollama reply length={len(reply) if reply else 0}")
                     print(f">> YOUTUBE DEBUG: Ollama reply preview: {reply[:100] if reply else 'No reply'}...")
-                    memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+                    await asyncio.to_thread(_save_bot_exchange, bot_id, user_msg, reply)
                     await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
                     print(">> YOUTUBE DEBUG: YouTube response sent, continuing...")
                     continue
@@ -741,11 +804,197 @@ Do not mention any inability to access external content."""
                 continue
 
             reply = await route_message(bot_id, user_msg, ask_ollama)
-            memory.save_conversation(f"[{bot_id}] {user_msg}", memory.extract_summary(reply))
+            await asyncio.to_thread(_save_bot_exchange, bot_id, user_msg, reply)
+            await asyncio.to_thread(memory.mem0_add, user_msg, memory.extract_summary(reply))
             _try_obsidian_daily_log(bot_id, user_msg, reply)
             await websocket.send_json({"type": "answer", "bot": bot_id, "text": reply})
     except WebSocketDisconnect:
         print(">> HIGA HOUSE: Client disconnected.")
+
+@app.get("/api/health")
+async def api_health():
+    import json as _json
+    from datetime import datetime as _dt
+    metrics   = get_system_metrics()
+    bot_health = orchestrator.get_health_summary()
+
+    # Briefing status — written by briefing_scheduler on each send
+    _bstatus_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "briefing_status.json")
+    briefing = {"status": "unknown", "last_period": None, "sent_at": None, "error": None}
+    try:
+        if os.path.exists(_bstatus_path):
+            with open(_bstatus_path) as _f:
+                briefing = _json.load(_f)
+    except Exception:
+        pass
+
+    # Memory layer health — file/dir existence only, no imports
+    _proj = os.path.dirname(os.path.abspath(__file__))
+    memory_health = {
+        "sqlite": "ok" if os.path.exists(os.path.join(_proj, "jarvis_memory.db")) else "missing",
+        "chroma": "ok" if os.path.exists(os.path.join(_proj, "chroma_db")) else "missing",
+        "mem0":   "ok" if os.path.exists(os.path.join(_proj, "chroma_mem0")) else "unavailable",
+    }
+
+    return JSONResponse({
+        "timestamp":  _dt.now().isoformat(),
+        "uptime":     metrics["uptime"],
+        "system": {
+            "cpu_pct":     metrics["cpu_total"],
+            "ram_used_gb": metrics["ram_used_gb"],
+            "ram_total_gb":metrics["ram_total_gb"],
+            "disk_pct":    metrics["disk_percent"],
+        },
+        "portfolio": {
+            "equity":    latest_portfolio.get("equity",   "0.00"),
+            "day_pl":    latest_portfolio.get("day_pl",   "0.00"),
+            "positions": len(latest_portfolio.get("positions", [])),
+        },
+        "market":          {k: v["price"] for k, v in latest_market_data.items()},
+        "bots":            bot_health["bots"],
+        "tasks":           bot_health["tasks"],
+        "recent_failures": bot_health["recent_failures"],
+        "briefing":        briefing,
+        "memory":          memory_health,
+        "session": {
+            "commands":        command_count,
+            "messages_today":  daily_messages,
+            "tokens_est_today":daily_tokens_est,
+        },
+    })
+
+
+@app.get("/api/usage")
+async def api_usage():
+    try:
+        return JSONResponse(build_local_usage_snapshot())
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "date": time.strftime("%Y-%m-%d"),
+                "claude_code": {
+                    "connected": False,
+                    "label": "usage unavailable",
+                    "detail": str(exc)[:120],
+                },
+                "codex": {
+                    "connected": False,
+                    "label": "usage unavailable",
+                    "detail": str(exc)[:120],
+                },
+                "requests": {
+                    "connected": False,
+                    "total": 0,
+                    "label": "usage unavailable",
+                    "detail": "local usage snapshot failed",
+                },
+                "remaining": {
+                    "connected": False,
+                    "label": "local only",
+                    "detail": "no quota source",
+                },
+            },
+            status_code=500,
+        )
+
+
+_ADMIN_HTML = """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>JARVIS ADMIN</title>
+<style>
+  body{background:#0a0a0a;color:#e0e0e0;font-family:monospace;padding:20px;margin:0}
+  h1{color:#00aaff;margin:0 0 4px;font-size:1.4em;letter-spacing:.1em}
+  .ts{color:#555;font-size:.8em;margin-bottom:20px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .card{background:#111;border:1px solid #1e1e1e;border-radius:6px;padding:14px}
+  .card h2{font-size:.7em;color:#555;text-transform:uppercase;letter-spacing:.12em;margin:0 0 10px}
+  .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #161616;font-size:.82em}
+  .row:last-child{border:none}
+  .ok{color:#00cc66}.warn{color:#ffaa00}.err{color:#ff4444}.dim{color:#555}
+  .badge{padding:1px 6px;border-radius:3px;font-size:.75em}
+  .bi{background:#0d2236;color:#5ab0ff}
+  .bw{background:#2a2000;color:#ffcc00}
+  .bb{background:#2a0808;color:#ff6666}
+  .bo{background:#0d261a;color:#00cc66}
+  .bm{background:#261a0d;color:#ff8800}
+  footer{color:#333;font-size:.72em;margin-top:20px}
+  a{color:#333}
+</style>
+</head>
+<body>
+<h1>&#9889; JARVIS ADMIN</h1>
+<div class="ts" id="ts">Loading&hellip;</div>
+<div class="grid" id="grid">Loading&hellip;</div>
+<footer>Auto-refresh 15s &middot; <a href="/api/health">JSON</a> &middot; <a href="/api/bots/status">Bots</a> &middot; <a href="/api/bots/tasks">Tasks</a></footer>
+<script>
+async function load(){
+  let d;
+  try{ d=await fetch('/api/health').then(r=>r.json()); }
+  catch(e){ document.getElementById('ts').textContent='Error: '+e; return; }
+  document.getElementById('ts').textContent='Updated '+new Date(d.timestamp).toLocaleTimeString()+' · Uptime '+d.uptime;
+  const s=d.system,p=d.portfolio,b=d.bots,t=d.tasks,m=d.memory,br=d.briefing,ss=d.session,mk=d.market||{};
+  const cc=s.cpu_pct>80?'err':s.cpu_pct>50?'warn':'ok';
+  const dc=s.disk_pct>85?'err':s.disk_pct>70?'warn':'ok';
+  const tc=br.status==='ok'?'ok':br.status==='error'?'err':'warn';
+  const failRows=(d.recent_failures||[]).map(f=>
+    `<div class="row"><span>${f.bot_id} #${f.id}: ${f.task.slice(0,45)}</span><span class="err">${(f.error||'').slice(0,35)}</span></div>`
+  ).join('')||'<div class="row"><span class="ok">No recent failures</span></div>';
+  const mktRows=Object.entries(mk).map(([k,v])=>
+    `<div class="row"><span>${k}</span><span>$${v}</span></div>`
+  ).join('')||'<div class="row dim"><span>Syncing&hellip;</span></div>';
+  const memRows=Object.entries(m).map(([k,v])=>
+    `<div class="row"><span>${k}</span><span class="badge ${v==='ok'?'bo':'bm'}">${v}</span></div>`
+  ).join('');
+  document.getElementById('grid').innerHTML=`
+    <div class="card"><h2>System</h2>
+      <div class="row"><span>CPU</span><span class="${cc}">${s.cpu_pct}%</span></div>
+      <div class="row"><span>RAM</span><span>${s.ram_used_gb} / ${s.ram_total_gb} GB</span></div>
+      <div class="row"><span>Disk</span><span class="${dc}">${s.disk_pct}%</span></div>
+    </div>
+    <div class="card"><h2>Portfolio</h2>
+      <div class="row"><span>Equity</span><span>$${p.equity}</span></div>
+      <div class="row"><span>Day P/L</span><span>${p.day_pl}</span></div>
+      <div class="row"><span>Positions</span><span>${p.positions}</span></div>
+    </div>
+    <div class="card"><h2>Market</h2>${mktRows}</div>
+    <div class="card"><h2>Bots (${b.total})</h2>
+      <div class="row"><span>Idle</span><span class="badge bi">${b.idle}</span></div>
+      <div class="row"><span>Working</span><span class="badge bw">${b.working}</span></div>
+      <div class="row"><span>Blocked</span><span class="${b.blocked>0?'err':'ok'}">${b.blocked}</span></div>
+      <div class="row"><span>Review Ready</span><span class="${b.review_ready>0?'ok':''}">${b.review_ready}</span></div>
+    </div>
+    <div class="card"><h2>Tasks (24 h)</h2>
+      <div class="row"><span>Pending</span><span>${t.pending}</span></div>
+      <div class="row"><span>Completed</span><span class="ok">${t.completed_24h}</span></div>
+      <div class="row"><span>Failed</span><span class="${t.failed_24h>0?'err':'ok'}">${t.failed_24h}</span></div>
+    </div>
+    <div class="card"><h2>Recent Failures</h2>${failRows}</div>
+    <div class="card"><h2>Briefing</h2>
+      <div class="row"><span>Last</span><span>${br.last_period||'&mdash;'}</span></div>
+      <div class="row"><span>Status</span><span class="${tc}">${br.status}</span></div>
+      <div class="row"><span>Sent</span><span>${br.sent_at?new Date(br.sent_at).toLocaleTimeString():'&mdash;'}</span></div>
+    </div>
+    <div class="card"><h2>Memory</h2>${memRows}</div>
+    <div class="card"><h2>Session</h2>
+      <div class="row"><span>Commands</span><span>${ss.commands}</span></div>
+      <div class="row"><span>Messages Today</span><span>${ss.messages_today}</span></div>
+      <div class="row"><span>Tokens Est.</span><span>${ss.tokens_est_today.toLocaleString()}</span></div>
+    </div>
+  `;
+}
+load();
+setInterval(load,15000);
+</script>
+</body>
+</html>"""
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_dashboard():
+    return HTMLResponse(content=_ADMIN_HTML)
+
 
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 

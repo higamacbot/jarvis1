@@ -71,6 +71,13 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .bi b{color:var(--cyan);font-weight:normal;}
 #cstat{margin-left:auto;display:flex;align-items:center;gap:5px;}
 #tt{position:fixed;background:var(--bg3);border:1px solid var(--cyan);color:var(--cyan);font-size:9px;padding:3px 9px;border-radius:2px;pointer-events:none;opacity:0;transition:opacity 0.15s;white-space:nowrap;letter-spacing:0.05em;box-shadow:0 0 8px var(--cyan-dim);z-index:100;}
+.ract{position:absolute;bottom:14px;left:5px;right:22px;font-size:7px;color:rgba(0,255,255,0.4);font-family:var(--font-mono);letter-spacing:0.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:10;pointer-events:none;}
+#actfeed{flex-shrink:0;border-bottom:1px solid var(--border);padding:5px 8px 4px;max-height:76px;overflow-y:auto;background:rgba(0,0,0,0.25);scrollbar-width:thin;scrollbar-color:var(--cyan) transparent;}
+#actfeed-title{font-size:7px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;margin-bottom:3px;}
+.afevent{font-size:7px;font-family:var(--font-mono);color:rgba(0,255,255,0.45);padding:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.afevent.handoff{color:rgba(255,180,0,0.75);}
+.afevent.error{color:rgba(255,60,60,0.75);}
+.afevent.task_complete{color:rgba(0,255,136,0.65);}
 </style>
 </head>
 <body>
@@ -91,6 +98,9 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
       <div id="cname">JARVIS</div>
       <div id="crole">Central intelligence · system coordinator</div>
       <div id="cbar"></div>
+    </div>
+    <div id="actfeed">
+      <div id="actfeed-title">activity</div>
     </div>
     <div id="msgs">
       <div class="msender">SYSTEM</div>
@@ -545,6 +555,16 @@ function applyBotStatuses(statuses) {
     dot.style.background  = STATUS_DOT[status] || STATUS_DOT.idle;
     dot.style.boxShadow   = `0 0 5px ${STATUS_DOT[status] || STATUS_DOT.idle}`;
     dot.title = `${data.status} — ${data.current_task}`;
+
+    // Per-room activity subtitle
+    const actText = (data.activity_text || 'idle');
+    let ract = room.querySelector('.ract');
+    if (!ract) {
+      ract = document.createElement('div');
+      ract.className = 'ract';
+      room.appendChild(ract);
+    }
+    ract.textContent = actText;
   });
 }
 
@@ -601,6 +621,31 @@ pollBotStatuses();
 pollBotNotifications();
 setInterval(pollBotStatuses, 3000);
 setInterval(pollBotNotifications, 2500);
+
+// ── ACTIVITY FEED ──────────────────────────────────────────────────────────
+async function pollActivity() {
+  try {
+    const r = await fetch('/api/bots/activity');
+    if (!r.ok) return;
+    const events = await r.json();
+    const feed = document.getElementById('actfeed');
+    if (!feed) return;
+    feed.querySelectorAll('.afevent').forEach(el => el.remove());
+    (events || []).slice(0, 8).forEach(ev => {
+      const d = document.createElement('div');
+      d.className = 'afevent ' + (ev.event_type || '');
+      const ts = (ev.created_at || '').slice(11, 16);
+      const label = (ev.from_bot && ev.to_bot && ev.event_type === 'handoff')
+        ? `${ev.from_bot.toUpperCase()}→${ev.to_bot.toUpperCase()}`
+        : (ev.bot_id || '').toUpperCase();
+      d.textContent = `[${ts}] ${label}  ${ev.message || ''}`;
+      d.title = ev.message || '';
+      feed.appendChild(d);
+    });
+  } catch(e) {}
+}
+pollActivity();
+setInterval(pollActivity, 5000);
 // ──────────────────────────────────────────────────────────────────────────
 
 </script>

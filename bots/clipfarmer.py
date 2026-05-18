@@ -29,8 +29,67 @@ def _extract_video_id(url: str) -> str:
     return m.group(1) if m else re.sub(r"[^A-Za-z0-9_-]", "_", url)[-20:]
 
 
-def _download_video(url: str, out_dir: str) -> Tuple[Optional[str], str, int]:
-    """yt-dlp download. Returns (local_path, title, duration_secs)."""
+def _is_tiktok_shortlink(url: str) -> bool:
+    return bool(re.search(r'https?://(?:www\.)?tiktok\.com/t/|https?://vm\.tiktok\.com/', url, re.IGNORECASE))
+
+
+def _resolve_redirect_url(url: str) -> str:
+    import httpx
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+            "Version/16.6 Mobile/15E148 Safari/604.1"
+        ),
+        "Referer": "https://www.tiktok.com/",
+    }
+    with httpx.Client(follow_redirects=True, headers=headers, timeout=15.0) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        return str(response.url)
+
+
+def _normalize_clip_url(url: str, resolver=None) -> Tuple[str, str]:
+    """Expand supported shortlinks before handing off to yt-dlp."""
+    if not _is_tiktok_shortlink(url):
+        return url, ""
+    resolver = resolver or _resolve_redirect_url
+    try:
+        resolved = resolver(url)
+    except Exception as exc:
+        return url, f"redirect resolution failed: {exc}"
+    if not resolved or _is_tiktok_shortlink(resolved):
+        return url, "redirect resolution failed: unresolved shortlink"
+    return resolved, ""
+
+
+def _classify_download_error(exc_str: str) -> Tuple[str, str]:
+    """Returns (error_kind, user_hint) from a yt-dlp exception string."""
+    s = exc_str.lower()
+    # Check bot detection before auth — "sign in to confirm you're not a bot" is bot detection
+    if any(p in s for p in ("not a bot", "captcha", "robot", "confirm you")):
+        return "bot_detection", "TikTok bot detection triggered — try the full video URL (tiktok.com/@user/video/...)"
+    # Check geo before generic unavailable — "not available in your country" is geo
+    if any(p in s for p in ("your country", "not available in", "geo", "region")):
+        return "geo", "video appears geo-restricted"
+    # Check network before generic unavailable — "503 Service Unavailable" is a network error
+    if any(p in s for p in ("network", "connection", "timeout", "ssl", "http error")):
+        return "network", "network error during download — check your connection"
+    if any(p in s for p in ("private", "not available", "unavailable", "removed", "deleted")):
+        return "unavailable", "video is private, deleted, or unavailable"
+    # "log in" (space) and "login" (no space) both appear in yt-dlp messages
+    if any(p in s for p in ("log in", "login", "sign in", "authentication", "age-restricted")):
+        return "auth_required", "TikTok requires login — try a public post URL"
+    if any(p in s for p in ("copyright", "blocked", "takedown")):
+        return "blocked", "video blocked due to copyright"
+    if "unsupported url" in s:
+        return "unsupported", "URL format not supported by yt-dlp"
+    return "unknown", "check server console for details"
+
+
+def _download_video(url: str, out_dir: str) -> Tuple[Optional[str], str, int, str]:
+    """yt-dlp download. Returns (local_path, title, duration_secs, error_detail)."""
     try:
         import yt_dlp
         ydl_opts = {
@@ -40,6 +99,14 @@ def _download_video(url: str, out_dir: str) -> Tuple[Optional[str], str, int]:
             "quiet": True,
             "no_warnings": True,
         }
+        if not _is_youtube(url):
+            # TikTok combined streams don't support format merging.
+            # cookiesfrombrowser fingerprints Chrome headers even when 0 cookies
+            # are extracted — sufficient to pass TikTok bot detection.
+            ydl_opts["format"] = "best[ext=mp4]/best"
+            ydl_opts["cookiesfrombrowser"] = ("chrome",)
+            ydl_opts["retries"] = 3
+            ydl_opts["fragment_retries"] = 3
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             title    = info.get("title", "untitled")
@@ -47,11 +114,11 @@ def _download_video(url: str, out_dir: str) -> Tuple[Optional[str], str, int]:
         for ext in ("mp4", "mkv", "webm"):
             path = os.path.join(out_dir, f"source.{ext}")
             if os.path.isfile(path):
-                return path, title, duration
-        return None, title, duration
+                return path, title, duration, ""
+        return None, title, duration, "file not found after download"
     except Exception as e:
         print(f">> CLIPFARMER: download failed: {e}")
-        return None, "", 0
+        return None, "", 0, str(e)
 
 
 def _get_transcript(url: str, source_path: str) -> Tuple[List[Dict], str]:
@@ -305,6 +372,39 @@ def _detect_relevant_bots(transcript_text: str) -> List[str]:
     return bots
 
 
+def _analysis_fallback(analysis: dict, segments: List[Dict]) -> dict:
+    """
+    Fill empty analysis fields from raw transcript text.
+    Only touches fields that Ollama left blank — populated fields are unchanged.
+    """
+    transcript_text = " ".join(
+        s.get("text", "").strip() for s in segments if s.get("text")
+    ).strip()
+    if not transcript_text:
+        return analysis
+
+    # Summary: first 2-3 meaningful sentences
+    if not analysis.get("summary"):
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', transcript_text)
+                     if len(s.strip()) > 15]
+        analysis["summary"] = " ".join(sentences[:3])[:400]
+
+    # Key insights: up to 3 distinct transcript sentences
+    if not analysis.get("key_insights"):
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', transcript_text)
+                     if len(s.strip()) > 20]
+        analysis["key_insights"] = sentences[:3]
+
+    # Bot tags: minimal entry for jarvisbot and robowright if still empty
+    bot_tags = analysis.get("bot_tags", {})
+    snippet = transcript_text[:200]
+    for bot_id, angle in (("jarvisbot", "general clip"), ("robowright", "content strategy")):
+        if bot_id in bot_tags and not bot_tags[bot_id]:
+            bot_tags[bot_id] = [{"start_sec": 0, "end_sec": 0, "angle": angle, "note": snippet}]
+    analysis["bot_tags"] = bot_tags
+    return analysis
+
+
 def _analyze_clips(segments: List[Dict], moments: List[Dict], title: str,
                    url: str, duration: int, out_dir: str, bots: List[str]) -> bool:
     """
@@ -354,7 +454,7 @@ Use integer seconds. Include 3-5 important sections and 2-3 tags per bot."""
     try:
         import httpx
         r = httpx.post(OLLAMA_URL,
-                       json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+                       json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False, "think": False},
                        timeout=120.0)
         print(f">> CLIPFARMER ANALYZE: Ollama status={r.status_code}")
         if r.status_code == 200:
@@ -391,6 +491,16 @@ Use integer seconds. Include 3-5 important sections and 2-3 tags per bot."""
         "bot_tags": data.get("bot_tags", {b: [] for b in bots}) if data else {b: [] for b in bots},
     }
     print(f">> CLIPFARMER ANALYZE: analysis dict built — ollama_data={'yes' if data else 'no (fallback empty)'}")
+
+    # Apply deterministic fallback if Ollama returned sparse output
+    _is_sparse = (
+        not analysis["summary"]
+        or not analysis["key_insights"]
+        or not any(analysis["bot_tags"].values())
+    )
+    if _is_sparse:
+        analysis = _analysis_fallback(analysis, segments)
+        print(">> CLIPFARMER ANALYZE: sparse Ollama output — deterministic fallback applied")
 
     analysis_json_path = os.path.join(out_dir, "analysis.json")
     analysis_md_path   = os.path.join(out_dir, "analysis.md")
@@ -520,6 +630,47 @@ def _ingest_to_bot_memory(analysis: Dict, url: str) -> List[Tuple[str, str, str]
     return memory_log
 
 
+def _emit_robowright_handoff(analysis: Dict) -> bool:
+    """Save a lightweight handoff when a clip looks reusable for content packaging."""
+    summary = str(analysis.get("summary", "")).strip()
+    insights = [str(item).strip() for item in (analysis.get("key_insights", []) or []) if str(item).strip()]
+    robowright_tags = (analysis.get("bot_tags", {}) or {}).get("robowright", []) or []
+    if not (summary or insights or robowright_tags):
+        return False
+
+    lines = []
+    if summary:
+        lines.append(f"Summary: {summary}")
+    if insights:
+        lines.append("Key insights:")
+        lines.extend(f"- {item}" for item in insights[:3])
+    for tag in robowright_tags[:2]:
+        angle = str(tag.get("angle", "")).strip()
+        note = str(tag.get("note", "")).strip()
+        detail = " — ".join(part for part in (angle, note) if part)
+        if detail:
+            lines.append(f"Robowright angle: {detail}")
+
+    context = "\n".join(lines).strip()
+    if not context:
+        return False
+
+    try:
+        from loop_memory import save_handoff
+        save_handoff(
+            from_bot="clipfarmer",
+            to_bot="robowright",
+            topic=str(analysis.get("title", "untitled")).strip(),
+            context=context,
+            suggested_action="make_carousel",
+        )
+        print(">> CLIPFARMER HANDOFF: saved handoff for robowright")
+        return True
+    except Exception as e:
+        print(f">> CLIPFARMER HANDOFF: save failed: {e}")
+        return False
+
+
 def _write_report(title: str, url: str, duration: int, landscape: bool,
                   transcript_method: str, clips_made: list,
                   analysis_data: Dict, memory_log: List[Tuple[str, str, str]],
@@ -643,15 +794,30 @@ def farm_clips(url: str, n_clips: int = 5) -> str:
 
     print(f">> CLIPFARMER: starting pipeline for {video_id}")
 
+    download_url, resolve_error = _normalize_clip_url(url)
+    if resolve_error:
+        return (
+            "Clip failed — could not resolve the TikTok shortlink.\n"
+            f"URL tried: {url}\n"
+            "Tip: try the full TikTok video URL (tiktok.com/@user/video/...) instead of the shortlink."
+        )
+
     # 1. Download
     print(">> CLIPFARMER: downloading…")
-    source, title, duration = _download_video(url, out_dir)
+    source, title, duration, dl_error = _download_video(download_url, out_dir)
     if not source:
-        return f"Download failed for {url}. The video may be private or geo-restricted."
+        kind, hint = _classify_download_error(dl_error)
+        is_shortlink = _is_tiktok_shortlink(url)
+        tip = (
+            "Try the full TikTok video URL (tiktok.com/@user/video/...) instead of the shortlink."
+            if is_shortlink else
+            "Try a public post link, or provide a local file path."
+        )
+        return f"Clip failed — {hint}.\nURL tried: {url}\nTip: {tip}"
     print(f">> CLIPFARMER: '{title}' ({duration}s) saved to {source}")
 
     # 2. Transcript (three-tier: youtube_api → yt_dlp_subs → whisper → none)
-    segments, transcript_method = _get_transcript(url, source)
+    segments, transcript_method = _get_transcript(download_url, source)
     has_transcript = bool(segments)
 
     # Cap clip count for very short videos (< 90s) to avoid overlapping junk
@@ -707,6 +873,7 @@ def farm_clips(url: str, n_clips: int = 5) -> str:
             memory_log = _ingest_to_bot_memory(analysis_data, url)
             saved_count = sum(1 for _, s, _ in memory_log if s == "saved")
             print(f">> CLIPFARMER MEMORY: total saved = {saved_count}")
+            _emit_robowright_handoff(analysis_data)
             if saved_count:
                 artifact_note += f"\n  {saved_count} bot memory entries written"
         except Exception as e:
