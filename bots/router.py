@@ -629,7 +629,9 @@ Every agent line must be present."""
             from bots.clipfarmer import farm_clips
             import asyncio as _asyncio
             result = await _asyncio.to_thread(farm_clips, _clip_url)
-            return f"Clipping now, sir. This may take a minute while I download and cut.\n\n{result}"
+            if result.startswith("Clipped "):
+                return f"Clipping now, sir. This may take a minute while I download and cut.\n\n{result}"
+            return result
 
         _jq = user_msg.lower().strip()
         _FORCE_PREFIXES = ("new project: ", "fresh cut: ")

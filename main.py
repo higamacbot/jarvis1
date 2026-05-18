@@ -32,6 +32,7 @@ from mac_tools import detect_mac_command
 from autonomous_runner import runner, queue_youtube_playlist, queue_channel
 from telegram_bot import poll_telegram, send_telegram
 from indicators import is_indicator_request, is_portfolio_scan, extract_ticker, analyze_ticker, analyze_portfolio
+from local_usage import build_local_usage_snapshot
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURATION
@@ -861,6 +862,40 @@ async def api_health():
             "tokens_est_today":daily_tokens_est,
         },
     })
+
+
+@app.get("/api/usage")
+async def api_usage():
+    try:
+        return JSONResponse(build_local_usage_snapshot())
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "date": time.strftime("%Y-%m-%d"),
+                "claude_code": {
+                    "connected": False,
+                    "label": "usage unavailable",
+                    "detail": str(exc)[:120],
+                },
+                "codex": {
+                    "connected": False,
+                    "label": "usage unavailable",
+                    "detail": str(exc)[:120],
+                },
+                "requests": {
+                    "connected": False,
+                    "total": 0,
+                    "label": "usage unavailable",
+                    "detail": "local usage snapshot failed",
+                },
+                "remaining": {
+                    "connected": False,
+                    "label": "local only",
+                    "detail": "no quota source",
+                },
+            },
+            status_code=500,
+        )
 
 
 _ADMIN_HTML = """<!DOCTYPE html>

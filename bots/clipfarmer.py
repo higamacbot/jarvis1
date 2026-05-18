@@ -29,8 +29,67 @@ def _extract_video_id(url: str) -> str:
     return m.group(1) if m else re.sub(r"[^A-Za-z0-9_-]", "_", url)[-20:]
 
 
-def _download_video(url: str, out_dir: str) -> Tuple[Optional[str], str, int]:
-    """yt-dlp download. Returns (local_path, title, duration_secs)."""
+def _is_tiktok_shortlink(url: str) -> bool:
+    return bool(re.search(r'https?://(?:www\.)?tiktok\.com/t/|https?://vm\.tiktok\.com/', url, re.IGNORECASE))
+
+
+def _resolve_redirect_url(url: str) -> str:
+    import httpx
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+            "Version/16.6 Mobile/15E148 Safari/604.1"
+        ),
+        "Referer": "https://www.tiktok.com/",
+    }
+    with httpx.Client(follow_redirects=True, headers=headers, timeout=15.0) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        return str(response.url)
+
+
+def _normalize_clip_url(url: str, resolver=None) -> Tuple[str, str]:
+    """Expand supported shortlinks before handing off to yt-dlp."""
+    if not _is_tiktok_shortlink(url):
+        return url, ""
+    resolver = resolver or _resolve_redirect_url
+    try:
+        resolved = resolver(url)
+    except Exception as exc:
+        return url, f"redirect resolution failed: {exc}"
+    if not resolved or _is_tiktok_shortlink(resolved):
+        return url, "redirect resolution failed: unresolved shortlink"
+    return resolved, ""
+
+
+def _classify_download_error(exc_str: str) -> Tuple[str, str]:
+    """Returns (error_kind, user_hint) from a yt-dlp exception string."""
+    s = exc_str.lower()
+    # Check bot detection before auth — "sign in to confirm you're not a bot" is bot detection
+    if any(p in s for p in ("not a bot", "captcha", "robot", "confirm you")):
+        return "bot_detection", "TikTok bot detection triggered — try the full video URL (tiktok.com/@user/video/...)"
+    # Check geo before generic unavailable — "not available in your country" is geo
+    if any(p in s for p in ("your country", "not available in", "geo", "region")):
+        return "geo", "video appears geo-restricted"
+    # Check network before generic unavailable — "503 Service Unavailable" is a network error
+    if any(p in s for p in ("network", "connection", "timeout", "ssl", "http error")):
+        return "network", "network error during download — check your connection"
+    if any(p in s for p in ("private", "not available", "unavailable", "removed", "deleted")):
+        return "unavailable", "video is private, deleted, or unavailable"
+    # "log in" (space) and "login" (no space) both appear in yt-dlp messages
+    if any(p in s for p in ("log in", "login", "sign in", "authentication", "age-restricted")):
+        return "auth_required", "TikTok requires login — try a public post URL"
+    if any(p in s for p in ("copyright", "blocked", "takedown")):
+        return "blocked", "video blocked due to copyright"
+    if "unsupported url" in s:
+        return "unsupported", "URL format not supported by yt-dlp"
+    return "unknown", "check server console for details"
+
+
+def _download_video(url: str, out_dir: str) -> Tuple[Optional[str], str, int, str]:
+    """yt-dlp download. Returns (local_path, title, duration_secs, error_detail)."""
     try:
         import yt_dlp
         ydl_opts = {
@@ -40,6 +99,14 @@ def _download_video(url: str, out_dir: str) -> Tuple[Optional[str], str, int]:
             "quiet": True,
             "no_warnings": True,
         }
+        if not _is_youtube(url):
+            # TikTok combined streams don't support format merging.
+            # cookiesfrombrowser fingerprints Chrome headers even when 0 cookies
+            # are extracted — sufficient to pass TikTok bot detection.
+            ydl_opts["format"] = "best[ext=mp4]/best"
+            ydl_opts["cookiesfrombrowser"] = ("chrome",)
+            ydl_opts["retries"] = 3
+            ydl_opts["fragment_retries"] = 3
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             title    = info.get("title", "untitled")
@@ -47,11 +114,11 @@ def _download_video(url: str, out_dir: str) -> Tuple[Optional[str], str, int]:
         for ext in ("mp4", "mkv", "webm"):
             path = os.path.join(out_dir, f"source.{ext}")
             if os.path.isfile(path):
-                return path, title, duration
-        return None, title, duration
+                return path, title, duration, ""
+        return None, title, duration, "file not found after download"
     except Exception as e:
         print(f">> CLIPFARMER: download failed: {e}")
-        return None, "", 0
+        return None, "", 0, str(e)
 
 
 def _get_transcript(url: str, source_path: str) -> Tuple[List[Dict], str]:
@@ -727,15 +794,30 @@ def farm_clips(url: str, n_clips: int = 5) -> str:
 
     print(f">> CLIPFARMER: starting pipeline for {video_id}")
 
+    download_url, resolve_error = _normalize_clip_url(url)
+    if resolve_error:
+        return (
+            "Clip failed — could not resolve the TikTok shortlink.\n"
+            f"URL tried: {url}\n"
+            "Tip: try the full TikTok video URL (tiktok.com/@user/video/...) instead of the shortlink."
+        )
+
     # 1. Download
     print(">> CLIPFARMER: downloading…")
-    source, title, duration = _download_video(url, out_dir)
+    source, title, duration, dl_error = _download_video(download_url, out_dir)
     if not source:
-        return f"Download failed for {url}. The video may be private or geo-restricted."
+        kind, hint = _classify_download_error(dl_error)
+        is_shortlink = _is_tiktok_shortlink(url)
+        tip = (
+            "Try the full TikTok video URL (tiktok.com/@user/video/...) instead of the shortlink."
+            if is_shortlink else
+            "Try a public post link, or provide a local file path."
+        )
+        return f"Clip failed — {hint}.\nURL tried: {url}\nTip: {tip}"
     print(f">> CLIPFARMER: '{title}' ({duration}s) saved to {source}")
 
     # 2. Transcript (three-tier: youtube_api → yt_dlp_subs → whisper → none)
-    segments, transcript_method = _get_transcript(url, source)
+    segments, transcript_method = _get_transcript(download_url, source)
     has_transcript = bool(segments)
 
     # Cap clip count for very short videos (< 90s) to avoid overlapping junk
