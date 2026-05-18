@@ -523,7 +523,7 @@ Do not mention any inability to access external content."""
 
 @app.get("/house")
 async def serve_house():
-    return FileResponse("frontend/house.html")
+    return FileResponse("frontend/house_v2.html")
 
 def _try_obsidian_daily_log(bot_id: str, user_msg: str, reply: str):
     try:
