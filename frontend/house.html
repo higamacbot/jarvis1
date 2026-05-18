@@ -73,8 +73,10 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 #tt{position:fixed;background:var(--bg3);border:1px solid var(--cyan);color:var(--cyan);font-size:9px;padding:3px 9px;border-radius:2px;pointer-events:none;opacity:0;transition:opacity 0.15s;white-space:nowrap;letter-spacing:0.05em;box-shadow:0 0 8px var(--cyan-dim);z-index:100;}
 .ract{position:absolute;bottom:14px;left:5px;right:22px;font-size:7px;color:rgba(0,255,255,0.4);font-family:var(--font-mono);letter-spacing:0.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:10;pointer-events:none;}
 #actfeed{flex-shrink:0;border-bottom:1px solid var(--border);padding:5px 8px 4px;max-height:76px;overflow-y:auto;background:rgba(0,0,0,0.25);scrollbar-width:thin;scrollbar-color:var(--cyan) transparent;}
-#actfeed-title{font-size:7px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;margin-bottom:3px;}
+#actfeed-title{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:7px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;margin-bottom:3px;}
+#wfchip{display:none;padding:1px 5px;border:1px solid rgba(255,180,0,0.45);border-radius:999px;color:rgba(255,210,120,0.92);background:rgba(255,180,0,0.08);font-size:6px;letter-spacing:0.1em;white-space:nowrap;}
 .afevent{font-size:7px;font-family:var(--font-mono);color:rgba(0,255,255,0.45);padding:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.afevent.task_start{color:rgba(255,190,90,0.78);}
 .afevent.handoff{color:rgba(255,180,0,0.75);}
 .afevent.error{color:rgba(255,60,60,0.75);}
 .afevent.task_complete{color:rgba(0,255,136,0.65);}
@@ -100,11 +102,11 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
       <div id="cbar"></div>
     </div>
     <div id="actfeed">
-      <div id="actfeed-title">activity</div>
+      <div id="actfeed-title"><span>activity</span><span id="wfchip">WORKFLOW ACTIVE</span></div>
     </div>
     <div id="msgs">
       <div class="msender">SYSTEM</div>
-      <div class="mb bot">HIGA HOUSE online. All 11 agents ready. Click any room to engage, or select ROUNDTABLE for group session.</div>
+      <div class="mb bot" id="syswelcome">HIGA HOUSE online. All agents ready. Click any room to engage, or select ROUNDTABLE for group session.</div>
     </div>
     <div id="iarea">
       <textarea id="minput" placeholder="ENTER COMMAND..." rows="1"></textarea>
@@ -116,7 +118,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
   <span class="bi">CPU <b id="b-cpu">--</b></span>
   <span class="bi">RAM <b id="b-ram">--</b></span>
   <span class="bi">UPTIME <b id="b-up">--</b></span>
-  <span class="bi">AGENTS <b style="color:var(--green)">11 ONLINE</b></span>
+  <span class="bi">AGENTS <b id="b-agents" style="color:var(--green)">-- ONLINE</b></span>
   <div id="cstat"><div class="pdot" id="cdot" style="background:var(--red);box-shadow:0 0 8px var(--red)"></div><span id="ctxt">OFFLINE</span></div>
 </div>
 </div>
@@ -184,6 +186,8 @@ LAYOUT.forEach(r=>{
 const BA={};
 BOT_IDS.forEach((id,i)=>{BA[id]={x:0,y:0,tx:0,ty:0,bob:i*0.3,wt:Math.random()*180};});
 let tick=0,curBot='jarvisbot';
+let lastStatuses = null;
+let workflowBannerTimer = null;
 
 function drawRoom(id){
   const cv=document.getElementById('cv-'+id);if(!cv)return;
@@ -535,6 +539,18 @@ const STATUS_DOT = {
 };
 
 function applyBotStatuses(statuses) {
+  lastStatuses = statuses || {};
+  const statusEntries = Object.entries(lastStatuses);
+  const totalAgents = statusEntries.length || Object.keys(BOTS).length;
+  const onlineCount = statusEntries.filter(([, data]) => (data && data.status) !== 'blocked').length || totalAgents;
+  const welcome = document.getElementById('syswelcome');
+  const agentBadge = document.getElementById('b-agents');
+  if (welcome) {
+    welcome.textContent = `HIGA HOUSE online. All ${totalAgents} agents ready. Click any room to engage, or select ROUNDTABLE for group session.`;
+  }
+  if (agentBadge) {
+    agentBadge.textContent = `${onlineCount} ONLINE`;
+  }
   Object.entries(statuses).forEach(([botId, data]) => {
     const room = document.getElementById('room-' + botId);
     if (!room) return;
@@ -646,6 +662,35 @@ async function pollActivity() {
 }
 pollActivity();
 setInterval(pollActivity, 5000);
+
+// ── WORKFLOW STATUS ────────────────────────────────────────────────────────
+async function pollWorkflows() {
+  try {
+    const r = await fetch('/api/workflows');
+    if (!r.ok) return;
+    const jobs = await r.json();
+    const chip = document.getElementById('wfchip');
+    if (!chip) return;
+    const active = (jobs || []).find(j => j.status === 'running');
+    if (!active) {
+      chip.style.display = 'none';
+      chip.textContent = 'WORKFLOW ACTIVE';
+      chip.title = '';
+      if (workflowBannerTimer) {
+        clearTimeout(workflowBannerTimer);
+        workflowBannerTimer = null;
+      }
+      return;
+    }
+    const total = active.total_steps || '?';
+    const current = Math.min((active.current_step || 0) + 1, total);
+    chip.style.display = 'inline-flex';
+    chip.textContent = `${String(active.name || 'workflow').toUpperCase()} ${current}/${total}`;
+    chip.title = `Workflow running: ${active.name || 'workflow'} — step ${current}/${total}`;
+  } catch(e) {}
+}
+pollWorkflows();
+setInterval(pollWorkflows, 5000);
 // ──────────────────────────────────────────────────────────────────────────
 
 </script>
