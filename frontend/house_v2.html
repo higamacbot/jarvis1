@@ -603,6 +603,8 @@ function selectBot(id){
     const arena=document.getElementById('room-debateroom');
     if(arena){arena.style.borderColor='#FF6B35';arena.style.boxShadow='0 0 20px rgba(255,107,53,0.6)';}
   } else {
+    const arena=document.getElementById('room-debateroom');
+    if(arena){arena.style.borderColor='';arena.style.boxShadow='';}
     if(!['shaman','libmom','magadad'].includes(id)){
       ['shaman','libmom','magadad'].forEach(bid=>{const b=BA[bid];if(b){b.wt=0;}});
     }
@@ -891,7 +893,7 @@ async function pollWorkflows(){
     const chip=document.getElementById('wfchip');
     const allRunning=(jobs||[]).filter(j=>j.status==='running');
     const nonReview=allRunning.find(j=>j.name!=='adversarial_review')||null;
-    const reviewJob=(jobs||[]).find(j=>j.name==='adversarial_review')||null;
+    const reviewJob=(jobs||[]).find(j=>j.name==='adversarial_review'&&j.status==='running')||null;
     _activeWorkflow=nonReview;_latestReviewJob=reviewJob;
     if(chip){
       const active=nonReview||allRunning[0]||null;
@@ -936,13 +938,14 @@ function renderReviewCard(){
     if(subEl)subEl.textContent='';return;
   }
   const stages=['PRODUCER','CHALLENGER','ARBITER'];
-  const stageName=stages[rv.current_step||0]||'RUNNING';
+  const stepIndex=rv.current_step||0;
+  const stageName=stages[Math.min(stepIndex,stages.length-1)]||'RUNNING';
   const isRunning=rv.status==='running';
   if(stageEl){
     stageEl.textContent=stageName+(isRunning?'…':'✓');
     stageEl.className='opc-val'+(isRunning?' purple':' dim');
   }
-  if(subEl)subEl.textContent=isRunning?'adversarial review active':`done · step ${(rv.current_step||0)+1}/${stages.length}`;
+  if(subEl)subEl.textContent=isRunning?'adversarial review active':`done · step ${Math.min(stepIndex,stages.length)}/${stages.length}`;
 }
 
 // ── STATUS LINE ────────────────────────────────────────────────────────────
