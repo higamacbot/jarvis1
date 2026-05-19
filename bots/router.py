@@ -126,6 +126,45 @@ def _resolve_review_target(raw: str):
             return None, f"no report.md or analysis.json in {folder}"
         return ("\n\n".join(parts))[:6000], os.path.basename(folder)
 
+    # ── latest workflow ───────────────────────────────────────────────────────
+    if lc in ("latest workflow", "workflow"):
+        import sqlite3 as _sq3
+        db_path = os.path.join(_JARVIS_ROOT, "jarvis_memory.db")
+        try:
+            conn = _sq3.connect(db_path)
+            conn.row_factory = _sq3.Row
+            c = conn.cursor()
+            c.execute(
+                "SELECT id, name, status, input_text FROM workflow_jobs ORDER BY id DESC LIMIT 1"
+            )
+            job_row = c.fetchone()
+            if not job_row:
+                conn.close()
+                return None, "no workflow jobs found"
+            job = dict(job_row)
+            job_id = job["id"]
+            c.execute(
+                "SELECT step_index, bot_id, action, status, result"
+                " FROM workflow_steps WHERE job_id=? ORDER BY step_index",
+                (job_id,),
+            )
+            steps = [dict(r) for r in c.fetchall()]
+            conn.close()
+        except Exception as e:
+            return None, f"workflow DB error: {e}"
+        lines = [
+            f"WORKFLOW #{job_id} — {job['name']} ({job['status']})",
+            f"Input: {(job.get('input_text') or '')[:300]}",
+            "",
+        ]
+        for s in steps:
+            snippet = (s.get("result") or "")[:500]
+            lines.append(f"Step {s['step_index'] + 1} [{s['bot_id']}] {s['action']} — {s['status']}")
+            if snippet:
+                lines.append(snippet)
+            lines.append("")
+        return ("\n".join(lines))[:6000], f"workflow #{job_id}"
+
     # ── review workflow <id> ──────────────────────────────────────────────────
     if lc.startswith("workflow "):
         job_id_str = raw.strip().split(" ", 1)[1].strip()
