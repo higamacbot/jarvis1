@@ -742,11 +742,6 @@ function connect(){
       } else {
         addMsg('bot',data.text,ansBot);
       }
-      const doneRoom=document.getElementById('room-'+ansBot);
-      if(doneRoom){
-        doneRoom.style.borderColor='#006600';doneRoom.style.boxShadow='0 0 14px rgba(0,255,100,0.7)';
-        setTimeout(()=>{doneRoom.style.borderColor='#0044AA';doneRoom.style.boxShadow='0 0 10px rgba(0,100,255,0.4)';},2000);
-      }
     }
   };
   ws.onclose=()=>{
@@ -775,8 +770,10 @@ function applyBotStatuses(statuses){
   Object.entries(statuses).forEach(([botId,data])=>{
     const room=document.getElementById('room-'+botId);if(!room)return;
     const status=data.status||'idle';
-    room.style.borderColor=STATUS_COLORS[status]||STATUS_COLORS.idle;
-    room.style.boxShadow=STATUS_GLOW[status]||STATUS_GLOW.idle;
+    if(botId!==curBot){
+      room.style.borderColor=STATUS_COLORS[status]||STATUS_COLORS.idle;
+      room.style.boxShadow=STATUS_GLOW[status]||STATUS_GLOW.idle;
+    }
     let dot=room.querySelector('.status-dot');
     if(!dot){
       dot=document.createElement('div');dot.className='status-dot';
@@ -982,6 +979,20 @@ function updateStatusLine(){
 
 setInterval(()=>{if(_latestHandoffEvent)updateStatusLine();},5000);
 pollWorkflows();setInterval(pollWorkflows,5000);
+
+// ── USAGE POLLING ──────────────────────────────────────────────────────────
+async function pollUsage(){
+  try{
+    const r=await fetch(`${API_ORIGIN}/api/usage`);if(!r.ok)return;
+    const d=await r.json();
+    const set=(id,val,dim)=>{const el=document.getElementById(id);if(!el)return;el.textContent=val||'—';el.className='ugv'+(dim?' dim':'');};
+    set('ug-claude',d.claude_code?.label,!d.claude_code?.connected);
+    set('ug-codex', d.codex?.label,      !d.codex?.connected);
+    set('ug-req',   d.requests?.label,   !d.requests?.connected);
+    set('ug-rem',   d.remaining?.label,  !d.remaining?.connected);
+  }catch(e){}
+}
+pollUsage();setInterval(pollUsage,30000);
 </script>
 </body>
 </html>
