@@ -240,6 +240,25 @@ def log_bot_activity(
             "DELETE FROM bot_activity_log WHERE id NOT IN"
             " (SELECT id FROM bot_activity_log ORDER BY id DESC LIMIT 100)"
         )
+        # mirror notable events into bot_notifications so the UI panel is populated
+        if event_type in ("task_complete", "handoff"):
+            c.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bot_notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bot_id TEXT, kind TEXT, message TEXT, created DATETIME, seen INTEGER DEFAULT 0
+                )
+                """
+            )
+            c.execute(
+                "INSERT INTO bot_notifications (bot_id, kind, message, created, seen)"
+                " VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)",
+                (bot_id, event_type, (message or "").strip()[:120]),
+            )
+            c.execute(
+                "DELETE FROM bot_notifications WHERE id NOT IN"
+                " (SELECT id FROM bot_notifications ORDER BY id DESC LIMIT 50)"
+            )
         conn.commit()
         conn.close()
     except Exception:
