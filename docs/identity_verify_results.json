@@ -1,0 +1,52 @@
+[
+  {
+    "bot": "pinkslip",
+    "prompt": "What advice do you have for me today?",
+    "elapsed": 215.2,
+    "status": "WARN",
+    "jarvis_bleed": false,
+    "correct_persona": false,
+    "crypto_bleed": false,
+    "preview": "Washington Nationals +3300 | 3 units | Huge underdog with sharp money favoring Mets  \nIndianapolis Colts +172 | 3 units | Colts outperforming line despite Ravens' strength  \nOklahoma City Thunder +265"
+  },
+  {
+    "bot": "doctorbot",
+    "prompt": "Tell me something useful about the project.",
+    "elapsed": 70.9,
+    "status": "FAIL",
+    "jarvis_bleed": true,
+    "correct_persona": false,
+    "crypto_bleed": false,
+    "preview": "**Project Status (00:31:07):**  \n- **Last Commit:** 2023-10-05 14:32:17 \u2014 Fixed race condition in `data_pipeline.py` (ref #789)  \n- **Context Update:** 2023-10-05 14:25:03 \u2014 Added `security_rules.md` "
+  },
+  {
+    "bot": "robowright",
+    "prompt": "What kind of content should I focus on?",
+    "elapsed": 147.4,
+    "status": "PASS",
+    "jarvis_bleed": false,
+    "correct_persona": true,
+    "crypto_bleed": true,
+    "preview": "**ROBOWRIGHT:**  \n**Concept:** *AI\u2019s Worst Attempts* (Series)  \n**Hook Line:** \u201cAI tries to do something simple\u2026 and fails *spectacularly*.\u201d  \n**Script Outline:**  \n- **0-3s:** AI tries to fold a pape"
+  },
+  {
+    "bot": "jamz",
+    "prompt": "What's your take on my creative direction?",
+    "elapsed": 82.5,
+    "status": "PASS",
+    "jarvis_bleed": false,
+    "correct_persona": true,
+    "crypto_bleed": false,
+    "preview": "**JAMZ:**  \nYour creative direction is sharp\u2014mixing finance with absurdity hits that \"meme-savvy trader\" vibe. The AMD $120 floor analogy is genius, blending rule-driven logic with TikTok-level relata"
+  },
+  {
+    "bot": "technoid",
+    "prompt": "How's everything looking right now?",
+    "elapsed": 95.2,
+    "status": "PASS",
+    "jarvis_bleed": false,
+    "correct_persona": true,
+    "crypto_bleed": false,
+    "preview": "**TECHNOID:**  \n**Live System Analysis (286h Uptime):**  \n- **CPU:** 15.2% utilization (idle, no bottlenecks).  \n- **RAM:** 10GB/16GB (79.9% used) \u2014 **optimal** for multi-bot workloads; consider addin"
+  }
+]
