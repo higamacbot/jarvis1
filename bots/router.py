@@ -667,7 +667,7 @@ User asked: {user_msg}
 
 Respond as Technoid with real numbers from the live data above."""
             from bots import technoid
-            return await ask_fn(tech_prompt, system_override=technoid.SYSTEM_PROMPT)
+            return await ask_fn(tech_prompt, system_override=technoid.SYSTEM_PROMPT, bot_name="technoid")
         except Exception as e:
             print(f">> TECHNOID ERROR: {e}")
 
@@ -1214,4 +1214,4 @@ Broker Breakdown:
         from pc_control import doctorbot_git_status
         return doctorbot_git_status()
 
-    return await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT)
+    return await ask_fn(user_msg, system_override=bot.SYSTEM_PROMPT, bot_name=bot_id)

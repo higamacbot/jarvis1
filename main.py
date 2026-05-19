@@ -236,11 +236,13 @@ async def fetch_alpaca():
 # OLLAMA LOGIC
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def ask_ollama(user_msg: str, extra_context: str = "", timeout: float = 240.0, system_override: str = None) -> str:
+async def ask_ollama(user_msg: str, extra_context: str = "", timeout: float = 240.0, system_override: str = None, bot_name: str = "") -> str:
+    _market_bots = {"jarvisbot", "stockbot", "cryptoid"}
+    _use_market_ctx = not bot_name or bot_name in _market_bots
     market_str = ", ".join([f"{k}: ${v['price']}" for k, v in latest_market_data.items()]) or "No market data."
     metrics = get_system_metrics()
     system_stats = f"CPU: {metrics['cpu_total']}% | RAM: {metrics['ram_used_gb']}GB | Uptime: {metrics['uptime']}"
-    trade_hist = get_trade_history(limit=5)
+    trade_hist = get_trade_history(limit=5) if _use_market_ctx else ""
     memory_bundle = await asyncio.to_thread(memory.build_memory_bundle, user_msg)
     rule_block = memory_bundle.get("rules", "")
     semantic_block = memory_bundle.get("semantic", "")
@@ -299,7 +301,18 @@ async def ask_ollama(user_msg: str, extra_context: str = "", timeout: float = 24
         if _is_mem_query else ""
     )
 
-    full_prompt = f"""{sys_prompt}{mem_hint}
+    _persona_lock = (
+        f"\n[YOU ARE {bot_name.upper()}. RESPOND ONLY AS {bot_name.upper()}. DO NOT USE THE NAME JARVIS.]\n"
+        if bot_name and bot_name not in _market_bots else ""
+    )
+    _completion_token = f"{bot_name.upper()}:" if bot_name and bot_name not in _market_bots else "JARVIS:"
+    _live_data = (
+        f"CRYPTO: {market_str}\nSYSTEM: {system_stats}"
+        if _use_market_ctx else f"SYSTEM: {system_stats}"
+    )
+    _trade_section = f"--- RECENT TRADES ---\n{trade_hist}\n---" if _use_market_ctx else ""
+
+    full_prompt = f"""{sys_prompt}{_persona_lock}{mem_hint}
 --- USER RULES & STORED PREFERENCES (override live portfolio for rule/preference queries) ---
 {rule_block if rule_block else "(no stored rules retrieved)"}
 --- RETRIEVED MEMORY ---
@@ -307,14 +320,11 @@ async def ask_ollama(user_msg: str, extra_context: str = "", timeout: float = 24
 ---
 {recent_block if recent_block else "(no recent context)"}
 --- LIVE DATA ---
-CRYPTO: {market_str}
-SYSTEM: {system_stats}
---- RECENT TRADES ---
-{trade_hist}
----
+{_live_data}
+{_trade_section}
 {extra_context}
 User: {user_msg}
-JARVIS:"""
+{_completion_token}"""
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
